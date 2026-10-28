@@ -1,0 +1,409 @@
+:root {
+  --surface-main: #ebe6dc;
+  --surface-panel: #f4f0e6;
+  --surface-panel-raised: #faf7f0;
+  --surface-panel-sunken: #dfd8cb;
+  --surface-metallic: #d3ccc0;
+  --surface-screen: #1b201e;
+  --screen-text: #5af0a2;
+  --screen-text-dim: #2d7a52;
+  --screen-amber: #ffb84d;
+  --screen-amber-dim: #996e2e;
+
+  --border-light: #ffffff;
+  --border-dark: #b8b0a2;
+  --border-chassis: #a89f91;
+
+  --text-main: #2b2824;
+  --text-muted: #6b645b;
+  --text-engraved: #857e74;
+
+  --accent-red: #d33c2f;
+  --accent-amber: #e68a1d;
+  --accent-green: #2fa35b;
+  --accent-cyan: #1d8ee6;
+
+  --shadow-raised: 0 4px 10px rgba(70, 60, 50, 0.08), 0 1px 3px rgba(70, 60, 50, 0.1), inset 0 1px 0 #ffffff;
+  --shadow-sunken: inset 2px 2px 5px rgba(50, 45, 40, 0.15), inset -1px -1px 3px rgba(255, 255, 255, 0.8);
+  --shadow-button: 0 3px 0 var(--border-dark), 0 4px 6px rgba(0, 0, 0, 0.12), inset 0 1px 0 #ffffff;
+  --shadow-button-pressed: inset 0 2px 4px rgba(0, 0, 0, 0.25), 0 1px 0 #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--surface-main);
+  background-image: 
+    radial-gradient(circle at 50% 0%, #f7f4ec 0%, transparent 70%),
+    repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0, 0, 0, 0.015) 3px, rgba(0, 0, 0, 0.015) 6px);
+  color: var(--text-main);
+  min-height: 100vh;
+  padding: 32px 16px;
+  display: flex;
+  justify-content: center;
+}
+
+.mono {
+  font-family: 'Chivo Mono', monospace;
+}
+
+/* Console Chassis */
+.console-chassis {
+  max-width: 1100px;
+  width: 100%;
+  background: var(--surface-panel);
+  border: 2px solid var(--border-chassis);
+  border-radius: 14px;
+  box-shadow: 
+    0 16px 40px rgba(60, 50, 40, 0.12),
+    0 2px 8px rgba(60, 50, 40, 0.08),
+    inset 0 1px 0 #ffffff,
+    inset 0 -2px 0 var(--border-dark);
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Subtle corner screw details */
+.screw {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e4ded3 0%, #b8b0a2 100%);
+  border: 1px solid #948b7d;
+  box-shadow: inset 1px 1px 2px rgba(255, 255, 255, 0.8), 0 1px 2px rgba(0, 0, 0, 0.2);
+  position: absolute;
+}
+.screw::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  left: 2px;
+  width: 6px;
+  height: 1px;
+  background: #605950;
+}
+.screw-tl { top: 10px; left: 10px; }
+.screw-tr { top: 10px; right: 10px; }
+.screw-bl { bottom: 10px; left: 10px; }
+.screw-br { bottom: 10px; right: 10px; }
+
+/* Metallic Panel Strips */
+.panel-metallic {
+  background: linear-gradient(180deg, #eae5db 0%, #ddd7cb 100%);
+  border: 1px solid var(--border-dark);
+  border-radius: 8px;
+  box-shadow: var(--shadow-raised);
+}
+
+.panel-sunken {
+  background: var(--surface-panel-sunken);
+  border: 1px solid var(--border-dark);
+  border-radius: 8px;
+  box-shadow: var(--shadow-sunken);
+}
+
+/* Header Faceplate */
+.console-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 20px;
+  border-bottom: 2px solid var(--border-dark);
+  margin-bottom: 24px;
+}
+
+.branding-plate {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.metal-badge {
+  background: linear-gradient(135deg, #ded8cb 0%, #c4bcae 100%);
+  padding: 6px 14px;
+  border: 1px solid #a2998b;
+  border-radius: 4px;
+  box-shadow: inset 0 1px 0 #ffffff, 0 2px 4px rgba(0, 0, 0, 0.1);
+  font-family: 'Chivo Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: #433e37;
+  text-transform: uppercase;
+}
+
+.console-title {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--text-main);
+}
+
+.console-subtitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* Physical Rocker & Tactile Switch */
+.switch-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rocker-switch {
+  width: 52px;
+  height: 28px;
+  background: #34302c;
+  border-radius: 14px;
+  border: 2px solid var(--border-chassis);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6);
+  position: relative;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.rocker-switch .rocker-knob {
+  width: 22px;
+  height: 22px;
+  background: linear-gradient(180deg, #ffffff 0%, #d4cec2 100%);
+  border-radius: 50%;
+  position: absolute;
+  top: 1px;
+  left: 2px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.rocker-switch.active {
+  background: #2a3a30;
+}
+
+.rocker-switch.active .rocker-knob {
+  transform: translateX(24px);
+  background: linear-gradient(180deg, #f7fdf9 0%, #c1e4ce 100%);
+}
+
+/* LED Indicator Lamps */
+.led-lamp {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.4);
+  display: inline-block;
+  margin-right: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.led-lamp.led-green {
+  background: radial-gradient(circle at 35% 35%, #9afcc4 0%, #2fa35b 70%);
+  box-shadow: 0 0 8px rgba(47, 163, 91, 0.8), 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.led-lamp.led-amber {
+  background: radial-gradient(circle at 35% 35%, #ffd480 0%, #e68a1d 70%);
+  box-shadow: 0 0 8px rgba(230, 138, 29, 0.8), 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.led-lamp.led-red {
+  background: radial-gradient(circle at 35% 35%, #ff958a 0%, #d33c2f 70%);
+  box-shadow: 0 0 8px rgba(211, 60, 47, 0.8), 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.led-lamp.led-off {
+  background: #4a453e;
+  box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Tactile Buttons */
+.tactile-btn {
+  background: linear-gradient(180deg, #faf7f0 0%, #eae4d8 100%);
+  border: 1px solid var(--border-dark);
+  border-radius: 6px;
+  box-shadow: var(--shadow-button);
+  color: var(--text-main);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 8px 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.1s ease;
+  user-select: none;
+}
+
+.tactile-btn:hover {
+  background: linear-gradient(180deg, #ffffff 0%, #eee8dc 100%);
+}
+
+.tactile-btn:active {
+  transform: translateY(2px);
+  box-shadow: var(--shadow-button-pressed);
+}
+
+.tactile-btn.primary {
+  background: linear-gradient(180deg, #443e37 0%, #2e2a25 100%);
+  color: #f7f4ec;
+  border-color: #1f1c19;
+  box-shadow: 0 3px 0 #151311, 0 4px 6px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.tactile-btn.primary:active {
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6);
+}
+
+/* Recessed CRT/LCD Telemetry Screen */
+.crt-screen {
+  background: var(--surface-screen);
+  border: 3px solid #36322d;
+  border-radius: 8px;
+  box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.8), 0 2px 4px rgba(0, 0, 0, 0.15);
+  color: var(--screen-text);
+  padding: 16px;
+  font-family: 'Chivo Mono', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  position: relative;
+  overflow: hidden;
+}
+
+.crt-screen::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.15) 0px,
+    rgba(0, 0, 0, 0.15) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* VU Meter Level Bar */
+.vu-meter {
+  display: flex;
+  gap: 3px;
+  align-items: flex-end;
+  height: 24px;
+}
+
+.vu-segment {
+  flex: 1;
+  height: 100%;
+  background: #3d3730;
+  border-radius: 1px;
+}
+
+.vu-segment.lit-green {
+  background: #2fa35b;
+  box-shadow: 0 0 6px #2fa35b;
+}
+
+.vu-segment.lit-amber {
+  background: #e68a1d;
+  box-shadow: 0 0 6px #e68a1d;
+}
+
+.vu-segment.lit-red {
+  background: #d33c2f;
+  box-shadow: 0 0 6px #d33c2f;
+}
+
+/* Section Grid */
+.console-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 820px) {
+  .console-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Audio Channel Strip Cards */
+.channel-strip {
+  background: var(--surface-panel-raised);
+  border: 1px solid var(--border-dark);
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: var(--shadow-raised);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.strip-label {
+  font-family: 'Chivo Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-engraved);
+  border-bottom: 1px dashed var(--border-dark);
+  padding-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Roadmap Segment Blocks */
+.roadmap-container {
+  background: var(--surface-panel-sunken);
+  border: 1px solid var(--border-dark);
+  border-radius: 8px;
+  padding: 14px 18px;
+  box-shadow: var(--shadow-sunken);
+}
+
+.roadmap-steps {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin-top: 10px;
+}
+
+@media (max-width: 768px) {
+  .roadmap-steps {
+    grid-template-columns: 1fr;
+  }
+}
+
+.step-card {
+  background: var(--surface-panel-raised);
+  border: 1px solid var(--border-dark);
+  border-radius: 6px;
+  padding: 10px;
+  box-shadow: var(--shadow-raised);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.step-card.active {
+  border-left: 4px solid var(--accent-green);
+  background: #fbfbf7;
+}
+
+.step-header {
+  font-family: 'Chivo Mono', monospace;
+  font-weight: 700;
+  font-size: 10px;
+  color: var(--text-engraved);
+}

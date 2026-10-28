@@ -1,0 +1,29 @@
+{
+  "name": "readify",
+  "version": "1.0.0",
+  "description": "Document digitization tool transforming non-machine-readable documents into machine-readable documents",
+  "type": "module",
+  "main": "server/server.js",
+  "scripts": {
+    "dev": "concurrently -n \"server,client\" -c \"yellow,cyan\" \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "node server/server.js",
+    "dev:client": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "db:init": "node server/db/init.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "lucide-react": "^0.475.0",
+    "pg": "^8.13.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "vite": "^6.1.1"
+  }
+}
