@@ -407,3 +407,151 @@ body {
   font-size: 10px;
   color: var(--text-engraved);
 }
+
+/* Cassette Bay Ingestion Dropzone */
+.cassette-dropzone {
+  background: var(--surface-panel-sunken);
+  border: 2px dashed var(--border-dark);
+  border-radius: 8px;
+  box-shadow: var(--shadow-sunken);
+  padding: 16px;
+  text-align: center;
+  transition: all 0.18s ease;
+  cursor: pointer;
+  outline: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.cassette-dropzone:hover,
+.cassette-dropzone:focus-visible {
+  border-color: #857e74;
+  background: #dbd4c6;
+}
+
+.cassette-dropzone.dragging {
+  border-color: var(--accent-green);
+  background: #d4ebd8;
+  box-shadow: inset 0 0 10px rgba(47, 163, 91, 0.25);
+}
+
+.cassette-cartridge {
+  background: linear-gradient(180deg, #fbfaf7 0%, #ebe5d9 100%);
+  border: 1px solid var(--border-dark);
+  border-radius: 6px;
+  padding: 12px;
+  box-shadow: var(--shadow-raised);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+  width: 100%;
+}
+
+.cartridge-badge {
+  font-family: 'Chivo Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: #443e37;
+  color: #f7f4ec;
+  letter-spacing: 0.5px;
+}
+
+/* Repository Documents Table */
+.console-table-container {
+  overflow-x: auto;
+  border-radius: 6px;
+  background: var(--surface-screen);
+  border: 2px solid #36322d;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.7);
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.console-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'Chivo Mono', monospace;
+  font-size: 11px;
+  color: #d1ccbf;
+}
+
+.console-table th {
+  background: #252a28;
+  color: #8fa696;
+  text-align: left;
+  padding: 8px 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #333f38;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.console-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #232b26;
+  vertical-align: middle;
+}
+
+.console-table tr:hover {
+  background: rgba(90, 240, 162, 0.05);
+}
+
+.doc-status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.doc-status-tag.uploaded {
+  background: rgba(230, 138, 29, 0.15);
+  color: #ffb84d;
+  border: 1px solid rgba(230, 138, 29, 0.3);
+}
+
+.doc-status-tag.completed {
+  background: rgba(47, 163, 91, 0.15);
+  color: #5af0a2;
+  border: 1px solid rgba(47, 163, 91, 0.3);
+}
+
+.doc-status-tag.failed {
+  background: rgba(211, 60, 47, 0.15);
+  color: #ff958a;
+  border: 1px solid rgba(211, 60, 47, 0.3);
+}
+
+/* Alert Notification Bars */
+.telemetry-alert {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-family: 'Chivo Mono', monospace;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.telemetry-alert.error {
+  background: #fbeae8;
+  border: 1px solid #f29e97;
+  color: #a72317;
+}
+
+.telemetry-alert.success {
+  background: #eaf8f0;
+  border: 1px solid #95dfb4;
+  color: #176a38;
+}
+
