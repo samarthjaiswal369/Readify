@@ -24,3 +24,7 @@ Thumbs.db
 dist/
 dist-ssr/
 *.local
+
+
+/eng.traineddata
+.cache/
