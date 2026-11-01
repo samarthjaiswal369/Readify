@@ -14,7 +14,9 @@ import {
   UploadCloud,
   AlertTriangle,
   XCircle,
-  FileCheck
+  FileCheck,
+  Eye,
+  X
 } from 'lucide-react';
 
 function formatFileSize(bytes) {
@@ -41,7 +43,7 @@ export default function App() {
     { id: 1, time: '00:00:01', msg: 'READIFY CONSOLE OS v1.0 INITIALIZING...' },
     { id: 2, time: '00:00:02', msg: 'POSTGRESQL CONNECTION POOL INITIALIZED' },
     { id: 3, time: '00:00:03', msg: 'SCHEMA VERIFIED: "documents" TABLE READY' },
-    { id: 4, time: '00:00:04', msg: 'STANDBY: AWAITING INPUT CASSETTE (DAY 2 INGESTION ACTIVE)' },
+    { id: 4, time: '00:00:04', msg: 'STANDBY: AWAITING INPUT CASSETTE (DAY 3 PROCESSING ACTIVE)' },
   ]);
 
   const [ocrEngineMode, setOcrEngineMode] = useState(true);
@@ -56,6 +58,14 @@ export default function App() {
   const [uploadError, setUploadError] = useState(null);
   const [uploadSuccess, setUploadSuccess] = useState(null);
   const fileInputRef = useRef(null);
+
+  const [processingIds, setProcessingIds] = useState([]);
+  const [processingNotice, setProcessingNotice] = useState(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewDocument, setPreviewDocument] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState(null);
+  const [previewProcessing, setPreviewProcessing] = useState(null);
 
   const addLog = (msg) => {
     const now = new Date().toTimeString().split(' ')[0];
@@ -75,6 +85,85 @@ export default function App() {
     } catch (err) {
       console.error('Failed to fetch documents:', err);
     }
+  };
+
+  const handleProcessDocument = async (documentId) => {
+    if (processingIds.includes(documentId)) return;
+
+    setProcessingIds(current => [...current, documentId]);
+    setProcessingNotice(null);
+    setDocuments(current => current.map(doc =>
+      doc.id === documentId ? { ...doc, status: 'processing' } : doc
+    ));
+
+    addLog(`PROCESSING DOCUMENT #${documentId}...`);
+
+    try {
+      const response = await fetch(`/api/documents/${documentId}/process`, {
+        method: 'POST'
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Document processing failed.');
+      }
+
+      setPreviewDocument(data.document);
+      setPreviewProcessing(data.processing || null);
+      setPreviewError(null);
+      setPreviewOpen(true);
+
+      setProcessingNotice({
+        type: 'success',
+        message: `DOCUMENT #${documentId} PROCESSED SUCCESSFULLY.`
+      });
+
+      addLog(`PROCESSING COMPLETE // DOCUMENT #${documentId} // OCR: ${data.document.ocr_engine || 'NOT REQUIRED'}`);
+    } catch (error) {
+      setProcessingNotice({
+        type: 'error',
+        message: `DOCUMENT #${documentId}: ${error.message}`
+      });
+
+      addLog(`PROCESSING FAILED // #${documentId} // ${error.message}`);
+    } finally {
+      setProcessingIds(current =>
+        current.filter(id => id !== documentId)
+      );
+
+      await fetchDiagnostics();
+    }
+  };
+
+  const handleViewText = async (documentId) => {
+    setPreviewOpen(true);
+    setPreviewDocument(null);
+    setPreviewProcessing(null);
+    setPreviewError(null);
+    setPreviewLoading(true);
+
+    try {
+      const response = await fetch(`/api/documents/${documentId}`);
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to load extracted text.');
+      }
+
+      setPreviewDocument(data);
+    } catch (error) {
+      setPreviewError(error.message);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const closePreview = () => {
+    setPreviewOpen(false);
+    setPreviewDocument(null);
+    setPreviewProcessing(null);
+    setPreviewError(null);
   };
 
   const fetchDiagnostics = async () => {
@@ -520,7 +609,9 @@ export default function App() {
                       <th>TYPE</th>
                       <th>SIZE</th>
                       <th>INGEST STATUS</th>
+                      <th>READABILITY</th>
                       <th>RECORDED TIMESTAMP</th>
+                      <th>ACTIONS</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -540,7 +631,45 @@ export default function App() {
                             {doc.status || 'uploaded'}
                           </span>
                         </td>
+                        <td>
+                          {doc.status === 'completed' ? (
+                            <span className={`document-readability-tag ${doc.is_scanned ? 'ocr' : 'text'}`}>
+                              {doc.is_scanned ? 'OCR' : 'TEXT LAYER'}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#8fa696' }}>—</span>
+                          )}
+                        </td>
                         <td style={{ color: '#8fa696' }}>{formatDate(doc.created_at)}</td>
+                        <td>
+                          {doc.status === 'completed' ? (
+                            <button
+                              type="button"
+                              className="tactile-btn document-action-btn"
+                              onClick={() => handleViewText(doc.id)}
+                            >
+                              <Eye size={12} />
+                              VIEW TEXT
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="tactile-btn document-action-btn primary"
+                              onClick={() => handleProcessDocument(doc.id)}
+                              disabled={doc.status === 'processing' || processingIds.includes(doc.id)}
+                            >
+                              <RefreshCw
+                                size={12}
+                                className={processingIds.includes(doc.id) ? 'animate-spin' : ''}
+                              />
+                              {processingIds.includes(doc.id) || doc.status === 'processing'
+                                ? 'PROCESSING'
+                                : doc.status === 'failed'
+                                  ? 'RETRY'
+                                  : 'PROCESS'}
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -549,6 +678,23 @@ export default function App() {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', paddingTop: '8px' }}>
+              {processingNotice && (
+                <div className={`telemetry-alert ${processingNotice.type}`} style={{ marginTop: '12px' }}>
+                  {processingNotice.type === 'success'
+                    ? <CheckCircle2 size={14} />
+                    : <AlertTriangle size={14} />}
+                  <span>{processingNotice.message}</span>
+                  <button
+                    type="button"
+                    onClick={() => setProcessingNotice(null)}
+                    aria-label="Dismiss processing message"
+                    style={{ marginLeft: 'auto', border: 0, background: 'transparent', cursor: 'pointer' }}
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+
               <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div 
@@ -596,11 +742,82 @@ export default function App() {
             </div>
           </div>
 
+          {previewOpen && (
+            <div
+              className="document-preview-overlay"
+              onMouseDown={event => {
+                if (event.target === event.currentTarget) closePreview();
+              }}
+            >
+              <section
+                className="document-preview-panel"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="document-preview-title"
+              >
+                <header className="document-preview-header">
+                  <div>
+                    <div className="mono document-preview-kicker">READIFY // TEXT INSPECTION</div>
+                    <h2 id="document-preview-title">
+                      {previewDocument?.original_name || 'DOCUMENT PREVIEW'}
+                    </h2>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="tactile-btn"
+                    onClick={closePreview}
+                    aria-label="Close text preview"
+                  >
+                    <X size={16} />
+                    CLOSE
+                  </button>
+                </header>
+
+                {previewLoading ? (
+                  <div className="document-preview-message">
+                    <RefreshCw size={18} className="animate-spin" />
+                    LOADING EXTRACTED TEXT...
+                  </div>
+                ) : previewError ? (
+                  <div className="telemetry-alert error">{previewError}</div>
+                ) : previewDocument && (
+                  <>
+                    <div className="document-preview-metadata">
+                      <span>STATUS: {previewDocument.status?.toUpperCase()}</span>
+                      <span>
+                        METHOD: {previewDocument.is_scanned ? 'TESSERACT OCR' : 'TEXT EXTRACTION'}
+                      </span>
+                      <span>CHARACTERS: {previewDocument.extracted_character_count ?? 0}</span>
+                      <span>WORDS: {previewDocument.extracted_word_count ?? 0}</span>
+                    </div>
+
+                    {previewDocument.error_message && (
+                      <div className="telemetry-alert error">
+                        {previewDocument.error_message}
+                      </div>
+                    )}
+
+                    <pre className="document-preview-text">
+                      {previewDocument.extracted_text || 'NO EXTRACTED TEXT AVAILABLE.'}
+                    </pre>
+
+                    {previewProcessing?.warnings?.length > 0 && (
+                      <div className="telemetry-alert error" style={{ marginTop: '12px' }}>
+                        {previewProcessing.warnings.join(' ')}
+                      </div>
+                    )}
+                  </>
+                )}
+              </section>
+            </div>
+          )}
+
           {/* 5-Day Project Roadmap Rack */}
           <div className="roadmap-container">
             <div className="strip-label">
               <span>5-DAY COLLEGE PROJECT PROGRESSION LOG</span>
-              <span className="mono" style={{ fontSize: '10px' }}>DAY 2 OF 5 ACTIVE</span>
+              <span className="mono" style={{ fontSize: '10px' }}>DAY 3 OF 5 ACTIVE</span>
             </div>
 
             <div className="roadmap-steps">
@@ -613,7 +830,7 @@ export default function App() {
                 <div style={{ fontSize: '10px', color: '#666' }}>Vite React + Express + PostgreSQL schema & console chassis.</div>
               </div>
 
-              <div className="step-card active">
+              <div className="step-card">
                 <div className="step-header">
                   <span className="led-lamp led-green"></span>
                   DAY 2: INGESTION
@@ -622,9 +839,9 @@ export default function App() {
                 <div style={{ fontSize: '10px', color: '#666' }}>Drag-and-drop, signature validation & PostgreSQL tracking.</div>
               </div>
 
-              <div className="step-card">
+              <div className="step-card active">
                 <div className="step-header">
-                  <span className="led-lamp led-off"></span>
+                  <span className="led-lamp led-green"></span>
                   DAY 3: CONVERSION
                 </div>
                 <div style={{ fontWeight: 600 }}>OCR & Extraction</div>

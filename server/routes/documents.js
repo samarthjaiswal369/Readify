@@ -151,7 +151,11 @@ router.get('/:id', async (req, res) => {
         is_scanned,
         status,
         ocr_engine,
+        extracted_text,
         extracted_character_count,
+        extracted_word_count,
+        error_message,
+        processing_time_ms,
         created_at,
         updated_at
       FROM documents
