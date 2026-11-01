@@ -16,6 +16,7 @@
     "@napi-rs/canvas": "^1.0.13",
     "adm-zip": "^0.6.1",
     "cors": "^2.8.5",
+    "docx": "^9.15.1",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "lucide-react": "^0.475.0",
