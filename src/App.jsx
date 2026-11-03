@@ -652,6 +652,27 @@ export default function App() {
               </div>
             </div>
 
+              {conversionNotice && (
+                <div
+                  className={`telemetry-alert ${conversionNotice.type}`}
+                  role={conversionNotice.type === 'error' ? 'alert' : 'status'}
+                  style={{ marginTop: '8px', marginBottom: '10px', width: '100%' }}
+                >
+                  {conversionNotice.type === 'success'
+                    ? <CheckCircle2 size={14} />
+                    : <AlertTriangle size={14} />}
+                  <span>{conversionNotice.message}</span>
+                  <button
+                    type="button"
+                    onClick={() => setConversionNotice(null)}
+                    aria-label="Dismiss conversion message"
+                    style={{ marginLeft: 'auto', border: 0, background: 'transparent', cursor: 'pointer' }}
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+
             <div className="console-table-container">
               {documents.length === 0 ? (
                 <div style={{ padding: '28px', textAlign: 'center', color: '#777', fontFamily: "'Chivo Mono', monospace", fontSize: '11px' }}>
@@ -702,9 +723,9 @@ export default function App() {
                           )}
                         </td>
                         <td style={{ color: '#8fa696' }}>{formatDate(doc.created_at)}</td>
-                        <td>
+                        <td className={doc.status === 'completed' ? 'document-actions-cell' : ''}>
                           {doc.status === 'completed' ? (
-                            <div className="document-action-group">
+                            <div className="document-action-group document-action-group-table">
                               <button
                                 type="button"
                                 className="tactile-btn document-action-btn"
@@ -791,26 +812,6 @@ export default function App() {
                     type="button"
                     onClick={() => setProcessingNotice(null)}
                     aria-label="Dismiss processing message"
-                    style={{ marginLeft: 'auto', border: 0, background: 'transparent', cursor: 'pointer' }}
-                  >
-                    ×
-                  </button>
-                </div>
-              )}
-
-              {conversionNotice && (
-                <div
-                  className={`telemetry-alert ${conversionNotice.type}`}
-                  style={{ marginTop: '12px', width: '100%' }}
-                >
-                  {conversionNotice.type === 'success'
-                    ? <CheckCircle2 size={14} />
-                    : <AlertTriangle size={14} />}
-                  <span>{conversionNotice.message}</span>
-                  <button
-                    type="button"
-                    onClick={() => setConversionNotice(null)}
-                    aria-label="Dismiss conversion message"
                     style={{ marginLeft: 'auto', border: 0, background: 'transparent', cursor: 'pointer' }}
                   >
                     ×
