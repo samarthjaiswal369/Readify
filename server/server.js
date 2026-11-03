@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import healthRouter from './routes/health.js';
 import documentsRouter from './routes/documents.js';
 import documentProcessingRouter from './routes/documentProcessing.js';
+import documentConversionRouter from './routes/documentConversion.js';
 
 dotenv.config();
 
@@ -33,6 +34,7 @@ app.use(express.json());
 app.use('/api/health', healthRouter);
 app.use('/api/documents', documentsRouter);
 app.use('/api/documents', documentProcessingRouter);
+app.use('/api/documents', documentConversionRouter);
 
 app.use((err, req, res, next) => {
   console.error('API Error:', err);
