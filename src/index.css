@@ -575,6 +575,23 @@ body {
   cursor: not-allowed;
 }
 
+.document-action-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 250px;
+}
+
+.document-action-link {
+  text-decoration: none;
+  color: inherit;
+}
+
+.document-action-link:hover {
+  text-decoration: none;
+}
+
 .document-readability-tag {
   display: inline-block;
   padding: 3px 6px;
@@ -650,6 +667,32 @@ body {
   font-weight: 700;
 }
 
+.document-preview-export {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 12px;
+  background: #e3ddd1;
+  border: 1px solid #b8b0a3;
+  border-radius: 4px;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.8);
+}
+
+.document-preview-export-status {
+  margin-top: 5px;
+  color: #49443c;
+  font-family: 'Chivo Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.document-preview-export .document-action-group {
+  min-width: 0;
+}
+
 .document-preview-text {
   min-height: 180px;
   max-height: 48vh;
@@ -680,6 +723,15 @@ body {
 }
 
 @media (max-width: 600px) {
+  .document-preview-export {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .document-preview-export .document-action-group {
+    width: 100%;
+  }
+
   .document-preview-panel {
     padding: 14px;
   }

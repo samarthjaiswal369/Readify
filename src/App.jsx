@@ -43,7 +43,7 @@ export default function App() {
     { id: 1, time: '00:00:01', msg: 'READIFY CONSOLE OS v1.0 INITIALIZING...' },
     { id: 2, time: '00:00:02', msg: 'POSTGRESQL CONNECTION POOL INITIALIZED' },
     { id: 3, time: '00:00:03', msg: 'SCHEMA VERIFIED: "documents" TABLE READY' },
-    { id: 4, time: '00:00:04', msg: 'STANDBY: AWAITING INPUT CASSETTE (DAY 3 PROCESSING ACTIVE)' },
+    { id: 4, time: '00:00:04', msg: 'STANDBY: AWAITING INPUT CASSETTE (DAY 4 EXPORT ACTIVE)' },
   ]);
 
   const [ocrEngineMode, setOcrEngineMode] = useState(true);
@@ -61,6 +61,8 @@ export default function App() {
 
   const [processingIds, setProcessingIds] = useState([]);
   const [processingNotice, setProcessingNotice] = useState(null);
+  const [convertingIds, setConvertingIds] = useState([]);
+  const [conversionNotice, setConversionNotice] = useState(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewDocument, setPreviewDocument] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -109,7 +111,11 @@ export default function App() {
         throw new Error(data.error || 'Document processing failed.');
       }
 
-      setPreviewDocument(data.document);
+      setPreviewDocument({
+        ...data.document,
+        has_txt_output: false,
+        has_docx_output: false
+      });
       setPreviewProcessing(data.processing || null);
       setPreviewError(null);
       setPreviewOpen(true);
@@ -156,6 +162,61 @@ export default function App() {
       setPreviewError(error.message);
     } finally {
       setPreviewLoading(false);
+    }
+  };
+
+  const handleConvertDocument = async (documentId) => {
+    if (convertingIds.includes(documentId)) return;
+
+    setConvertingIds(current => [...current, documentId]);
+    setConversionNotice(null);
+
+    addLog(`GENERATING TXT AND DOCX OUTPUTS // DOCUMENT #${documentId}`);
+
+    try {
+      const response = await fetch(`/api/documents/${documentId}/convert`, {
+        method: 'POST'
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Document conversion failed.');
+      }
+
+      setDocuments(current => current.map(doc =>
+        doc.id === documentId
+          ? { ...doc, has_txt_output: true, has_docx_output: true }
+          : doc
+      ));
+
+      setPreviewDocument(current =>
+        current?.id === documentId
+          ? { ...current, has_txt_output: true, has_docx_output: true }
+          : current
+      );
+
+      setConversionNotice({
+        type: 'success',
+        documentId,
+        message: `DOCUMENT #${documentId}: TXT AND DOCX OUTPUTS READY.`
+      });
+
+      addLog(`EXPORT COMPLETE // DOCUMENT #${documentId} // TXT + DOCX READY`);
+    } catch (error) {
+      setConversionNotice({
+        type: 'error',
+        documentId,
+        message: `DOCUMENT #${documentId}: ${error.message}`
+      });
+
+      addLog(`EXPORT FAILED // #${documentId} // ${error.message}`);
+    } finally {
+      setConvertingIds(current =>
+        current.filter(id => id !== documentId)
+      );
+
+      await fetchDocuments();
     }
   };
 
@@ -643,14 +704,56 @@ export default function App() {
                         <td style={{ color: '#8fa696' }}>{formatDate(doc.created_at)}</td>
                         <td>
                           {doc.status === 'completed' ? (
-                            <button
-                              type="button"
-                              className="tactile-btn document-action-btn"
-                              onClick={() => handleViewText(doc.id)}
-                            >
-                              <Eye size={12} />
-                              VIEW TEXT
-                            </button>
+                            <div className="document-action-group">
+                              <button
+                                type="button"
+                                className="tactile-btn document-action-btn"
+                                onClick={() => handleViewText(doc.id)}
+                              >
+                                <Eye size={12} />
+                                VIEW TEXT
+                              </button>
+
+                              <button
+                                type="button"
+                                className="tactile-btn document-action-btn primary"
+                                onClick={() => handleConvertDocument(doc.id)}
+                                disabled={convertingIds.includes(doc.id)}
+                              >
+                                {convertingIds.includes(doc.id)
+                                  ? <RefreshCw size={12} className="animate-spin" />
+                                  : <FileCheck size={12} />}
+                                {convertingIds.includes(doc.id)
+                                  ? 'CONVERTING'
+                                  : doc.has_txt_output || doc.has_docx_output
+                                    ? 'CHECK / REPAIR'
+                                    : 'CONVERT'}
+                              </button>
+
+                              {doc.has_txt_output && txtOutputBus && (
+                                <a
+                                  className="tactile-btn document-action-btn document-action-link"
+                                  href={`/api/documents/${doc.id}/download/txt`}
+                                  download
+                                  title="Download plain text"
+                                >
+                                  <Download size={12} />
+                                  TXT
+                                </a>
+                              )}
+
+                              {doc.has_docx_output && docxOutputBus && (
+                                <a
+                                  className="tactile-btn document-action-btn document-action-link"
+                                  href={`/api/documents/${doc.id}/download/docx`}
+                                  download
+                                  title="Download Word document"
+                                >
+                                  <Download size={12} />
+                                  DOCX
+                                </a>
+                              )}
+                            </div>
                           ) : (
                             <button
                               type="button"
@@ -688,6 +791,26 @@ export default function App() {
                     type="button"
                     onClick={() => setProcessingNotice(null)}
                     aria-label="Dismiss processing message"
+                    style={{ marginLeft: 'auto', border: 0, background: 'transparent', cursor: 'pointer' }}
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+
+              {conversionNotice && (
+                <div
+                  className={`telemetry-alert ${conversionNotice.type}`}
+                  style={{ marginTop: '12px', width: '100%' }}
+                >
+                  {conversionNotice.type === 'success'
+                    ? <CheckCircle2 size={14} />
+                    : <AlertTriangle size={14} />}
+                  <span>{conversionNotice.message}</span>
+                  <button
+                    type="button"
+                    onClick={() => setConversionNotice(null)}
+                    aria-label="Dismiss conversion message"
                     style={{ marginLeft: 'auto', border: 0, background: 'transparent', cursor: 'pointer' }}
                   >
                     ×
@@ -733,7 +856,7 @@ export default function App() {
                 <button 
                   type="button"
                   className="tactile-btn primary"
-                  onClick={() => alert(`Day 2 Active Ingestion Bay Verified!\nDocuments in PostgreSQL: ${documents.length}`)}
+                  onClick={() => alert(`Day 4 Export Bus Verified!\nDocuments in PostgreSQL: ${documents.length}`)}
                 >
                   <CheckCircle2 size={14} color="#5af0a2" />
                   <span>DIAGNOSTIC TEST</span>
@@ -807,6 +930,69 @@ export default function App() {
                         {previewProcessing.warnings.join(' ')}
                       </div>
                     )}
+
+                    <div className="document-preview-export">
+                      <div>
+                        <div className="mono document-preview-kicker">MACHINE-READABLE OUTPUT BUS</div>
+                        <div className="document-preview-export-status">
+                          {previewDocument.has_txt_output && previewDocument.has_docx_output
+                            ? 'TXT + DOCX OUTPUTS REGISTERED'
+                            : 'OUTPUTS NOT GENERATED'}
+                        </div>
+                      </div>
+
+                      <div className="document-action-group">
+                        <button
+                          type="button"
+                          className="tactile-btn document-action-btn primary"
+                          onClick={() => handleConvertDocument(previewDocument.id)}
+                          disabled={convertingIds.includes(previewDocument.id)}
+                        >
+                          {convertingIds.includes(previewDocument.id)
+                            ? <RefreshCw size={12} className="animate-spin" />
+                            : <FileCheck size={12} />}
+                          {convertingIds.includes(previewDocument.id)
+                            ? 'CONVERTING'
+                            : previewDocument.has_txt_output || previewDocument.has_docx_output
+                              ? 'CHECK / REPAIR'
+                              : 'CONVERT'}
+                        </button>
+
+                        {previewDocument.has_txt_output && txtOutputBus && (
+                          <a
+                            className="tactile-btn document-action-btn document-action-link"
+                            href={`/api/documents/${previewDocument.id}/download/txt`}
+                            download
+                          >
+                            <Download size={12} />
+                            DOWNLOAD TXT
+                          </a>
+                        )}
+
+                        {previewDocument.has_docx_output && docxOutputBus && (
+                          <a
+                            className="tactile-btn document-action-btn document-action-link"
+                            href={`/api/documents/${previewDocument.id}/download/docx`}
+                            download
+                          >
+                            <Download size={12} />
+                            DOWNLOAD DOCX
+                          </a>
+                        )}
+                      </div>
+                    </div>
+
+                    {conversionNotice?.documentId === previewDocument.id && (
+                      <div
+                        className={`telemetry-alert ${conversionNotice.type}`}
+                        style={{ marginTop: '12px' }}
+                      >
+                        {conversionNotice.type === 'success'
+                          ? <CheckCircle2 size={14} />
+                          : <AlertTriangle size={14} />}
+                        <span>{conversionNotice.message}</span>
+                      </div>
+                    )}
                   </>
                 )}
               </section>
@@ -817,7 +1003,7 @@ export default function App() {
           <div className="roadmap-container">
             <div className="strip-label">
               <span>5-DAY COLLEGE PROJECT PROGRESSION LOG</span>
-              <span className="mono" style={{ fontSize: '10px' }}>DAY 3 OF 5 ACTIVE</span>
+              <span className="mono" style={{ fontSize: '10px' }}>DAY 4 OF 5 ACTIVE</span>
             </div>
 
             <div className="roadmap-steps">
@@ -839,7 +1025,7 @@ export default function App() {
                 <div style={{ fontSize: '10px', color: '#666' }}>Drag-and-drop, signature validation & PostgreSQL tracking.</div>
               </div>
 
-              <div className="step-card active">
+              <div className="step-card">
                 <div className="step-header">
                   <span className="led-lamp led-green"></span>
                   DAY 3: CONVERSION
@@ -848,9 +1034,9 @@ export default function App() {
                 <div style={{ fontSize: '10px', color: '#666' }}>pdfjs-dist digital text, tesseract.js OCR & mammoth.</div>
               </div>
 
-              <div className="step-card">
+              <div className="step-card active">
                 <div className="step-header">
-                  <span className="led-lamp led-off"></span>
+                  <span className="led-lamp led-green"></span>
                   DAY 4: EXPORT BUS
                 </div>
                 <div style={{ fontWeight: 600 }}>TXT & DOCX Output</div>

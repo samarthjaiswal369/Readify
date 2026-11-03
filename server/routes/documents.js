@@ -110,6 +110,8 @@ router.get('/', async (req, res) => {
         is_scanned,
         status,
         ocr_engine,
+        (txt_output_path IS NOT NULL) AS has_txt_output,
+        (docx_output_path IS NOT NULL) AS has_docx_output,
         extracted_character_count,
         created_at,
         updated_at
@@ -156,6 +158,8 @@ router.get('/:id', async (req, res) => {
         extracted_word_count,
         error_message,
         processing_time_ms,
+        (txt_output_path IS NOT NULL) AS has_txt_output,
+        (docx_output_path IS NOT NULL) AS has_docx_output,
         created_at,
         updated_at
       FROM documents
