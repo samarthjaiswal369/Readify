@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import pool from '../db/index.js';
+import { recordDocumentEvent } from '../utils/documentHistory.js';
 import {
   ALLOWED_EXTENSIONS,
   ALLOWED_MIME_TYPES,
@@ -128,6 +129,50 @@ router.get('/', async (req, res) => {
     return res.json(formattedRows);
   } catch (error) {
     return res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/documents/:id
+ * Returns a single document's metadata without exposing filesystem paths
+ */
+router.get('/:id/history', async (req, res) => {
+  const idValue = req.params.id;
+
+  if (!/^\d+$/.test(idValue) || !Number.isSafeInteger(Number(idValue)) || Number(idValue) < 1) {
+    return res.status(400).json({ error: 'Invalid document ID.' });
+  }
+
+  const documentId = Number(idValue);
+
+  try {
+    const document = await pool.query(
+      'SELECT id FROM documents WHERE id = $1',
+      [documentId]
+    );
+
+    if (document.rows.length === 0) {
+      return res.status(404).json({ error: 'Document not found.' });
+    }
+
+    const result = await pool.query(
+      `SELECT id, event_type, description, metadata, created_at
+       FROM document_events
+       WHERE document_id = $1
+       ORDER BY created_at DESC, id DESC
+       LIMIT 100`,
+      [documentId]
+    );
+
+    return res.json({
+      document_id: documentId,
+      events: result.rows
+    });
+  } catch (error) {
+    console.error('Document history retrieval failed:', error);
+    return res.status(500).json({
+      error: 'Unable to retrieve document activity history.'
+    });
   }
 });
 
@@ -280,6 +325,22 @@ router.post('/upload', uploadSingleFile, async (req, res) => {
     }
 
     const newDoc = dbResult.rows[0];
+
+    try {
+      await recordDocumentEvent(
+        pool,
+        newDoc.id,
+        'uploaded',
+        'Document uploaded successfully.',
+        {
+          original_name: newDoc.original_name,
+          file_type: newDoc.file_type,
+          file_size: Number(newDoc.file_size)
+        }
+      );
+    } catch (historyError) {
+      console.error('Could not record document upload history:', historyError);
+    }
 
     // 6. Return response with metadata and NO filesystem paths
     return res.status(201).json({

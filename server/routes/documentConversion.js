@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pool from '../db/index.js';
+import { recordDocumentEvent } from '../utils/documentHistory.js';
 import {
   generateTxt,
   generateDocx,
@@ -216,6 +217,21 @@ router.post('/:id/convert', async (req, res) => {
       ]
     );
 
+    await recordDocumentEvent(
+      client,
+      documentId,
+      'outputs_generated',
+      'Machine-readable TXT and DOCX outputs generated successfully.',
+      {
+        created_formats: [
+          ...(!existingTxt ? ['txt'] : []),
+          ...(!existingDocx ? ['docx'] : [])
+        ],
+        txt_file_size: txtFile.fileSize,
+        docx_file_size: docxFile.fileSize
+      }
+    );
+
     await client.query('COMMIT');
     transactionOpen = false;
 
@@ -256,6 +272,18 @@ router.post('/:id/convert', async (req, res) => {
       await removeOutputFile(file.fileName, file.extension).catch(cleanupError => {
         console.error('Generated output cleanup failed:', cleanupError);
       });
+    }
+
+    try {
+      await recordDocumentEvent(
+        pool,
+        documentId,
+        'conversion_failed',
+        'Machine-readable document conversion failed.',
+        { error_code: error.code || 'CONVERSION_ERROR' }
+      );
+    } catch (historyError) {
+      console.error('Could not record conversion failure history:', historyError);
     }
 
     console.error(`Document ${documentId} conversion failed:`, error);

@@ -720,6 +720,133 @@ body {
   min-width: 0;
 }
 
+.document-history-panel {
+  margin-top: 16px;
+  padding: 14px;
+  background: #e3ddd1;
+  border: 1px solid #b8b0a3;
+  border-radius: 5px;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.8);
+}
+
+.document-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #bdb5a8;
+}
+
+.document-history-header h3 {
+  margin-top: 4px;
+  color: #38332d;
+  font-size: 13px;
+  letter-spacing: 0.4px;
+}
+
+.document-history-count {
+  margin-top: 4px;
+  color: #746c60;
+  font-family: 'Chivo Mono', monospace;
+  font-size: 9px;
+}
+
+.document-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 14px 0 0 6px;
+  padding: 0 0 0 16px;
+  border-left: 2px solid #b9b1a4;
+  list-style: none;
+}
+
+.document-history-item {
+  position: relative;
+  padding: 0 0 16px;
+}
+
+.document-history-item:last-child {
+  padding-bottom: 2px;
+}
+
+.document-history-item::before {
+  position: absolute;
+  top: 3px;
+  left: -22px;
+  width: 10px;
+  height: 10px;
+  content: '';
+  background: #898176;
+  border: 2px solid #e3ddd1;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #898176;
+}
+
+.document-history-item.uploaded::before,
+.document-history-item.processing_completed::before,
+.document-history-item.outputs_generated::before {
+  background: #269b62;
+  box-shadow: 0 0 0 1px #269b62;
+}
+
+.document-history-item.processing_started::before {
+  background: #4388b8;
+  box-shadow: 0 0 0 1px #4388b8;
+}
+
+.document-history-item.processing_failed::before,
+.document-history-item.conversion_failed::before {
+  background: #c4473c;
+  box-shadow: 0 0 0 1px #c4473c;
+}
+
+.document-history-event {
+  min-width: 0;
+}
+
+.document-history-event-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.document-history-event-heading strong {
+  color: #38332d;
+  font-family: 'Chivo Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.3px;
+}
+
+.document-history-event-heading time {
+  color: #746c60;
+  font-family: 'Chivo Mono', monospace;
+  font-size: 9px;
+}
+
+.document-history-event p {
+  margin-top: 4px;
+  color: #625b51;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.document-history-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 72px;
+  color: #746c60;
+  font-family: 'Chivo Mono', monospace;
+  font-size: 10px;
+  text-align: center;
+}
+
 .document-preview-text {
   min-height: 180px;
   max-height: 48vh;
@@ -750,6 +877,15 @@ body {
 }
 
 @media (max-width: 600px) {
+  .document-history-header {
+    align-items: flex-start;
+  }
+
+  .document-history-event-heading {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .document-preview-export {
     align-items: stretch;
     flex-direction: column;

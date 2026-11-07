@@ -68,6 +68,9 @@ export default function App() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState(null);
   const [previewProcessing, setPreviewProcessing] = useState(null);
+  const [historyEvents, setHistoryEvents] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(null);
 
   const addLog = (msg) => {
     const now = new Date().toTimeString().split(' ')[0];
@@ -86,6 +89,27 @@ export default function App() {
       }
     } catch (err) {
       console.error('Failed to fetch documents:', err);
+    }
+  };
+
+  const fetchDocumentHistory = async (documentId) => {
+    setHistoryLoading(true);
+    setHistoryError(null);
+
+    try {
+      const response = await fetch(`/api/documents/${documentId}/history`);
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to load document history.');
+      }
+
+      setHistoryEvents(Array.isArray(data.events) ? data.events : []);
+    } catch (error) {
+      setHistoryEvents([]);
+      setHistoryError(error.message);
+    } finally {
+      setHistoryLoading(false);
     }
   };
 
@@ -119,6 +143,7 @@ export default function App() {
       setPreviewProcessing(data.processing || null);
       setPreviewError(null);
       setPreviewOpen(true);
+      await fetchDocumentHistory(documentId);
 
       setProcessingNotice({
         type: 'success',
@@ -148,6 +173,8 @@ export default function App() {
     setPreviewProcessing(null);
     setPreviewError(null);
     setPreviewLoading(true);
+    setHistoryEvents([]);
+    setHistoryError(null);
 
     try {
       const response = await fetch(`/api/documents/${documentId}`);
@@ -158,6 +185,7 @@ export default function App() {
       }
 
       setPreviewDocument(data);
+      await fetchDocumentHistory(documentId);
     } catch (error) {
       setPreviewError(error.message);
     } finally {
@@ -203,6 +231,7 @@ export default function App() {
       });
 
       addLog(`EXPORT COMPLETE // DOCUMENT #${documentId} // TXT + DOCX READY`);
+      await fetchDocumentHistory(documentId);
     } catch (error) {
       setConversionNotice({
         type: 'error',
@@ -225,6 +254,8 @@ export default function App() {
     setPreviewDocument(null);
     setPreviewProcessing(null);
     setPreviewError(null);
+    setHistoryEvents([]);
+    setHistoryError(null);
   };
 
   const fetchDiagnostics = async () => {
@@ -994,6 +1025,73 @@ export default function App() {
                         <span>{conversionNotice.message}</span>
                       </div>
                     )}
+
+                    <section
+                      className="document-history-panel"
+                      aria-labelledby="document-history-title"
+                    >
+                      <header className="document-history-header">
+                        <div>
+                          <div className="mono document-preview-kicker">
+                            READIFY // ACTIVITY ARCHIVE
+                          </div>
+                          <h3 id="document-history-title">DOCUMENT HISTORY</h3>
+                          <div className="document-history-count">
+                            {historyEvents.length} RECORDED EVENTS
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="tactile-btn document-action-btn"
+                          onClick={() => fetchDocumentHistory(previewDocument.id)}
+                          disabled={historyLoading}
+                        >
+                          <RefreshCw
+                            size={12}
+                            className={historyLoading ? 'animate-spin' : ''}
+                          />
+                          REFRESH
+                        </button>
+                      </header>
+
+                      {historyLoading ? (
+                        <div className="document-history-message">
+                          <RefreshCw size={15} className="animate-spin" />
+                          LOADING ACTIVITY HISTORY...
+                        </div>
+                      ) : historyError ? (
+                        <div className="telemetry-alert error">
+                          <AlertTriangle size={14} />
+                          {historyError}
+                        </div>
+                      ) : historyEvents.length === 0 ? (
+                        <div className="document-history-message">
+                          NO ACTIVITY HAS BEEN RECORDED FOR THIS DOCUMENT.
+                        </div>
+                      ) : (
+                        <ol className="document-history-list">
+                          {historyEvents.map(event => (
+                            <li
+                              key={event.id}
+                              className={`document-history-item ${event.event_type}`}
+                            >
+                              <div className="document-history-event">
+                                <div className="document-history-event-heading">
+                                  <strong>
+                                    {event.event_type.replace(/_/g, ' ').toUpperCase()}
+                                  </strong>
+                                  <time dateTime={event.created_at}>
+                                    {formatDate(event.created_at)}
+                                  </time>
+                                </div>
+                                <p>{event.description}</p>
+                              </div>
+                            </li>
+                          ))}
+                        </ol>
+                      )}
+                    </section>
                   </>
                 )}
               </section>

@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pool from '../db/index.js';
+import { recordDocumentEvent } from '../utils/documentHistory.js';
 import {
   processDocument,
   DocumentProcessingError
@@ -64,6 +65,18 @@ router.post('/:id/process', async (req, res) => {
     }
 
     const document = claim.rows[0];
+
+    try {
+      await recordDocumentEvent(
+        pool,
+        documentId,
+        'processing_started',
+        'Document text extraction started.',
+        { file_type: document.file_type }
+      );
+    } catch (historyError) {
+      console.error('Could not record processing start history:', historyError);
+    }
 
     try {
       const storedFilename = document.stored_filename;
@@ -154,6 +167,24 @@ router.post('/:id/process', async (req, res) => {
 
       const savedDocument = updated.rows[0];
 
+      try {
+        await recordDocumentEvent(
+          pool,
+          documentId,
+          'processing_completed',
+          'Document text extraction completed successfully.',
+          {
+            is_scanned: result.isScanned,
+            ocr_engine: result.ocrEngine,
+            extracted_character_count: characterCount,
+            extracted_word_count: wordCount,
+            processing_time_ms: processingTime
+          }
+        );
+      } catch (historyError) {
+        console.error('Could not record processing completion history:', historyError);
+      }
+
       return res.status(200).json({
         message: 'Document processed successfully.',
         document: {
@@ -188,6 +219,21 @@ router.post('/:id/process', async (req, res) => {
            WHERE id = $3`,
           [errorMessage, processingTime, documentId]
         );
+
+        try {
+          await recordDocumentEvent(
+            pool,
+            documentId,
+            'processing_failed',
+            'Document text extraction failed.',
+            {
+              error_message: errorMessage,
+              processing_time_ms: processingTime
+            }
+          );
+        } catch (historyError) {
+          console.error('Could not record processing failure history:', historyError);
+        }
       } catch (databaseError) {
         console.error('Failed to update document error status:', databaseError);
 
