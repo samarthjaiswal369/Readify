@@ -175,9 +175,118 @@ Open the frontend URL in your browser. Keep the terminal running while using the
 | `GET` | `/api/documents/:id/download/txt` | Download the TXT output |
 | `GET` | `/api/documents/:id/download/docx` | Download the DOCX output |
 
+## Database Architecture (Data Engineering)
+
+### Entity-Relationship Diagram
+
+```mermaid
+erDiagram
+    categories ||--o{ documents : "categorizes"
+    documents ||--o{ document_events : "tracks lifecycle"
+    documents ||--o{ document_summaries : "generates"
+
+    categories {
+        SERIAL id PK
+        VARCHAR name UK
+        TEXT description
+        TIMESTAMP created_at
+    }
+
+    documents {
+        SERIAL id PK
+        INTEGER category_id FK
+        VARCHAR original_name
+        VARCHAR stored_filename
+        VARCHAR mime_type
+        BIGINT file_size
+        VARCHAR file_type
+        BOOLEAN is_scanned
+        VARCHAR status
+        TEXT extracted_text
+        INTEGER extracted_character_count
+        INTEGER extracted_word_count
+        VARCHAR ocr_engine
+        TEXT error_message
+        VARCHAR txt_output_path
+        VARCHAR docx_output_path
+        INTEGER processing_time_ms
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+    }
+
+    document_events {
+        BIGSERIAL id PK
+        INTEGER document_id FK
+        VARCHAR event_type
+        TEXT description
+        JSONB metadata
+        TIMESTAMP created_at
+    }
+
+    document_summaries {
+        SERIAL id PK
+        INTEGER document_id FK
+        VARCHAR summary_type
+        TEXT summary_text
+        TEXT key_points
+        INTEGER word_count
+        TIMESTAMP created_at
+    }
+```
+
+### Relational Schema & Constraints
+
+- **`categories`**: Document classifications.
+  - Primary Key: `id SERIAL PRIMARY KEY`
+  - Constraints: `name VARCHAR(100) NOT NULL UNIQUE`
+- **`documents`**: Document storage, metadata, and processing state.
+  - Primary Key: `id SERIAL PRIMARY KEY`
+  - Foreign Key: `category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL`
+  - Constraints:
+    - `chk_documents_status`: `CHECK (status IN ('uploaded', 'processing', 'completed', 'failed'))`
+    - `chk_documents_file_size`: `CHECK (file_size > 0)`
+- **`document_events`**: Immutable audit log of document lifecycle events.
+  - Primary Key: `id BIGSERIAL PRIMARY KEY`
+  - Foreign Key: `document_id INTEGER REFERENCES documents(id) ON DELETE CASCADE`
+  - Constraints: `CHECK (event_type IN ('uploaded', 'processing_started', 'processing_completed', 'processing_failed', 'outputs_generated', 'conversion_failed'))`
+- **`document_summaries`**: Extracted text summaries and key takeaways.
+  - Primary Key: `id SERIAL PRIMARY KEY`
+  - Foreign Key: `document_id INTEGER REFERENCES documents(id) ON DELETE CASCADE`
+  - Constraints:
+    - `chk_summary_word_count`: `CHECK (word_count >= 0)`
+    - `chk_summary_type`: `CHECK (summary_type IN ('extractive', 'abstractive', 'bullet_points'))`
+
+### Data Engineering SQL Demonstration
+
+A dedicated SQL demonstration file is available at `server/db/demonstration_queries.sql`. It demonstrates:
+
+1. **DML Operations**: `INSERT`, `SELECT`, `UPDATE`, and `DELETE`.
+2. **Relational JOINs**:
+   - `INNER JOIN`: Documents joined with categories and summaries.
+   - `LEFT JOIN`: Categories joined with documents (preserving empty categories).
+   - Multi-table `LEFT JOIN`: Documents, events, and summaries.
+3. **Aggregation & Grouping**:
+   - `GROUP BY` and `HAVING`: Document counts and byte sizes by category.
+   - Aggregate functions: `COUNT(*)`, `SUM()`, `AVG()`, `MIN()`, and `MAX()`.
+4. **Subqueries**:
+   - Scalar subqueries: Comparing document size to overall average.
+   - `IN` and `EXISTS` subqueries: Filtering categories by scanned documents.
+   - Correlated subqueries: Group-relative calculations.
+5. **Referential Integrity**: Automatic cascading deletion (`ON DELETE CASCADE`).
+
+To execute and verify all 34 demonstration SQL operations:
+```bash
+node scripts/test-database-queries.js
+```
+
+Or execute directly through PostgreSQL:
+```bash
+psql -d readify_db -f server/db/demonstration_queries.sql
+```
+
 ## Database and file storage
 
-- PostgreSQL stores document metadata, extracted text, processing information, and activity events.
+- PostgreSQL stores document metadata, categories, extracted text, summaries, processing information, and activity events.
 - Original uploads are stored in `uploads/`.
 - Generated TXT and DOCX files are stored in `outputs/`.
 - The `uploads/` and `outputs/` folders are local runtime data and are ignored by Git. They are created by the application when needed.
@@ -185,11 +294,12 @@ Open the frontend URL in your browser. Keep the terminal running while using the
 
 ## Verification scripts
 
-The `scripts/` directory contains focused verification scripts for document processing, export generation, processing API behaviour, processing safety, conversion API behaviour, and document history.
+The `scripts/` directory contains focused verification scripts for document processing, export generation, processing API behaviour, processing safety, conversion API behaviour, document history, and database demonstration queries.
 
 Run an individual script from the project root with Node.js. For example:
 
 ```bash
+node scripts/test-database-queries.js
 node scripts/verify-document-processor.js
 node scripts/test-document-exporter.js
 node scripts/test-processing-api.js
@@ -202,7 +312,7 @@ Some API and database checks require the local environment and PostgreSQL databa
 
 ## Development history
 
-The following is the project's current ten-commit development history, in chronological order. The summaries describe the work included in each commit without relying on the original internal day labels.
+The following is the project's development history, in chronological order:
 
 | Commit | Date | What changed |
 |---|---|---|
@@ -216,6 +326,17 @@ The following is the project's current ten-commit development history, in chrono
 | `d71f0f3` | 2026-11-03 | Added the export interface, conversion/check-repair actions, TXT/DOCX download controls, and user notifications. |
 | `482ce37` | 2026-11-03 | Improved responsive layout, constrained the application to the viewport, and made the document table scroll internally on smaller screens. |
 | `f144def` | 2026-11-07 | Added document activity history, the `document_events` table, history API and logging utility, timeline interface, and history tests. |
+
+## Implementation Roadmap
+
+- [x] **Day 1**: Project Architecture, Express Backend, PostgreSQL Schema, and Audio-Console UI Foundation
+- [x] **Day 2**: File Ingestion (Multer), Validation (PDF, DOCX, PNG, JPG, JPEG) & Document Tracking
+- [x] **Day 3**: Document Processing Engine (pdfjs-dist, tesseract.js OCR, mammoth) & Text Extraction
+- [x] **Day 4**: Output Generation (TXT, DOCX via docx library), Download Endpoints & Export Controls
+- [x] **Data Engineering**: Relational Schema Expansion (`categories`, `document_summaries`), Foreign Keys, Constraints, and 34-Statement SQL Demonstration Suite
+- [ ] **Next**: Document Deletion, Multi-Criteria Search & Filtering (Status, Format, Category)
+- [ ] **Next**: Document Summary Endpoints & Relational Analytics
+- [ ] **Next**: Frontend Console Polish for Search, Filter, Deletion, and Summary Viewing
 
 ## Working with the team
 

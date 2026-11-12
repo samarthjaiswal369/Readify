@@ -15,9 +15,17 @@ async function initDatabase() {
     await pool.query(schemaSql);
     console.log('Database schema successfully initialized.');
 
-    const res = await pool.query('SELECT table_name FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2', ['public', 'documents']);
-    if (res.rows.length > 0) {
-      console.log('Verified: "documents" table exists.');
+    const expectedTables = ['categories', 'documents', 'document_events', 'document_summaries'];
+    for (const tableName of expectedTables) {
+      const res = await pool.query(
+        'SELECT table_name FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2',
+        ['public', tableName]
+      );
+      if (res.rows.length > 0) {
+        console.log(`Verified: "${tableName}" table exists.`);
+      } else {
+        throw new Error(`Table verification failed: "${tableName}" does not exist.`);
+      }
     }
   } catch (error) {
     console.error('Failed to initialize database schema:', error);
