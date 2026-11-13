@@ -17,13 +17,15 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const uploadsDir = path.resolve(__dirname, '../../uploads');
+const outputsDir = path.resolve(__dirname, '../../outputs');
 
-// Ensure uploads directory exists
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
+if (!fs.existsSync(outputsDir)) {
+  fs.mkdirSync(outputsDir, { recursive: true });
+}
 
-// Multer disk storage: securely store with a random UUID server-side filename
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadsDir);
@@ -44,7 +46,6 @@ const upload = multer({
   }
 });
 
-// Middleware wrapper to handle Multer errors gracefully
 const uploadSingleFile = (req, res, next) => {
   upload.single('file')(req, res, (err) => {
     if (err instanceof multer.MulterError) {
@@ -72,10 +73,6 @@ const uploadSingleFile = (req, res, next) => {
 
 const router = express.Router();
 
-/**
- * GET /api/documents/stats
- * Returns overall document digitization statistics
- */
 router.get('/stats', async (req, res) => {
   try {
     const statsQuery = `
@@ -95,15 +92,70 @@ router.get('/stats', async (req, res) => {
   }
 });
 
-/**
- * GET /api/documents
- * Returns list of documents without exposing filesystem paths
- */
 router.get('/', async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT
+    const { search, status, type, category_id } = req.query;
+    const conditions = [];
+    const params = [];
+
+    if (search !== undefined) {
+      if (typeof search !== 'string') {
+        return res.status(400).json({ error: 'Invalid search parameter. Expected a text string.' });
+      }
+      const trimmedSearch = search.trim();
+      if (trimmedSearch.length > 255) {
+        return res.status(400).json({ error: 'Search term too long. Maximum length is 255 characters.' });
+      }
+      if (trimmedSearch.length > 0) {
+        params.push(`%${trimmedSearch}%`);
+        conditions.push(`(original_name ILIKE $${params.length} OR (extracted_text IS NOT NULL AND extracted_text ILIKE $${params.length}))`);
+      }
+    }
+
+    if (status !== undefined) {
+      if (typeof status !== 'string') {
+        return res.status(400).json({ error: 'Invalid status filter. Expected a string.' });
+      }
+      const normalizedStatus = status.trim().toLowerCase();
+      const allowedStatuses = ['uploaded', 'processing', 'completed', 'failed'];
+      if (!allowedStatuses.includes(normalizedStatus)) {
+        return res.status(400).json({
+          error: `Invalid status filter "${status}". Allowed values: ${allowedStatuses.join(', ')}.`
+        });
+      }
+      params.push(normalizedStatus);
+      conditions.push(`status = $${params.length}`);
+    }
+
+    if (type !== undefined) {
+      if (typeof type !== 'string') {
+        return res.status(400).json({ error: 'Invalid type filter. Expected a string.' });
+      }
+      const normalizedType = type.trim().toLowerCase();
+      const allowedTypes = ['pdf', 'docx', 'png', 'jpg', 'jpeg'];
+      if (!allowedTypes.includes(normalizedType)) {
+        return res.status(400).json({
+          error: `Invalid type filter "${type}". Allowed values: ${allowedTypes.join(', ')}.`
+        });
+      }
+      params.push(normalizedType);
+      conditions.push(`file_type = $${params.length}`);
+    }
+
+    if (category_id !== undefined) {
+      const rawCategoryId = String(category_id).trim();
+      if (!/^\d+$/.test(rawCategoryId) || !Number.isSafeInteger(Number(rawCategoryId)) || Number(rawCategoryId) < 1) {
+        return res.status(400).json({ error: 'Invalid category_id filter. Expected a positive integer.' });
+      }
+      params.push(Number(rawCategoryId));
+      conditions.push(`category_id = $${params.length}`);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const sql = `
+      SELECT
         id,
+        category_id,
         original_name,
         file_size,
         file_type,
@@ -117,10 +169,12 @@ router.get('/', async (req, res) => {
         created_at,
         updated_at
       FROM documents
+      ${whereClause}
       ORDER BY created_at DESC
-      LIMIT 50`
-    );
+      LIMIT 50
+    `;
 
+    const result = await pool.query(sql, params);
     const formattedRows = result.rows.map((row) => ({
       ...row,
       file_size: Number(row.file_size)
@@ -132,10 +186,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-/**
- * GET /api/documents/:id
- * Returns a single document's metadata without exposing filesystem paths
- */
 router.get('/:id/history', async (req, res) => {
   const idValue = req.params.id;
 
@@ -176,10 +226,6 @@ router.get('/:id/history', async (req, res) => {
   }
 });
 
-/**
- * GET /api/documents/:id
- * Returns a single document's metadata without exposing filesystem paths
- */
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -191,6 +237,7 @@ router.get('/:id', async (req, res) => {
     const result = await pool.query(
       `SELECT
         id,
+        category_id,
         original_name,
         file_size,
         file_type,
@@ -226,10 +273,106 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-/**
- * POST /api/documents/upload
- * Securely uploads and registers a single document
- */
+router.delete('/:id', async (req, res) => {
+  const idValue = req.params.id;
+
+  if (!/^\d+$/.test(idValue) || !Number.isSafeInteger(Number(idValue)) || Number(idValue) < 1) {
+    return res.status(400).json({ error: 'Invalid document ID.' });
+  }
+
+  const documentId = Number(idValue);
+
+  let document;
+  try {
+    const documentResult = await pool.query(
+      'SELECT id, original_name, stored_filename, txt_output_path, docx_output_path FROM documents WHERE id = $1',
+      [documentId]
+    );
+
+    if (documentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Document not found.' });
+    }
+
+    document = documentResult.rows[0];
+  } catch (dbReadError) {
+    return res.status(500).json({
+      error: 'Failed to retrieve document for deletion.',
+      details: dbReadError.message,
+      database_deleted: false,
+      files_cleaned: false
+    });
+  }
+
+  try {
+    await pool.query('DELETE FROM documents WHERE id = $1', [documentId]);
+  } catch (dbDeleteError) {
+    return res.status(500).json({
+      error: 'Failed to delete document from database.',
+      details: dbDeleteError.message,
+      database_deleted: false,
+      files_cleaned: false
+    });
+  }
+
+  const filesToDelete = [];
+
+  if (document.stored_filename && typeof document.stored_filename === 'string') {
+    const safeStoredName = path.basename(document.stored_filename);
+    const targetUploadPath = path.resolve(uploadsDir, safeStoredName);
+    const relUploadPath = path.relative(uploadsDir, targetUploadPath);
+    if (!relUploadPath.startsWith('..') && !path.isAbsolute(relUploadPath)) {
+      filesToDelete.push({ type: 'upload', path: targetUploadPath });
+    }
+  }
+
+  if (document.txt_output_path && typeof document.txt_output_path === 'string') {
+    const safeTxtName = path.basename(document.txt_output_path);
+    const targetTxtPath = path.resolve(outputsDir, safeTxtName);
+    const relTxtPath = path.relative(outputsDir, targetTxtPath);
+    if (!relTxtPath.startsWith('..') && !path.isAbsolute(relTxtPath)) {
+      filesToDelete.push({ type: 'txt_output', path: targetTxtPath });
+    }
+  }
+
+  if (document.docx_output_path && typeof document.docx_output_path === 'string') {
+    const safeDocxName = path.basename(document.docx_output_path);
+    const targetDocxPath = path.resolve(outputsDir, safeDocxName);
+    const relDocxPath = path.relative(outputsDir, targetDocxPath);
+    if (!relDocxPath.startsWith('..') && !path.isAbsolute(relDocxPath)) {
+      filesToDelete.push({ type: 'docx_output', path: targetDocxPath });
+    }
+  }
+
+  let allFilesDeleted = true;
+  const cleanupWarnings = [];
+
+  for (const item of filesToDelete) {
+    try {
+      await safeDeleteFile(item.path);
+    } catch (fileError) {
+      allFilesDeleted = false;
+      cleanupWarnings.push(`Could not delete ${item.type} file: ${fileError.message}`);
+    }
+  }
+
+  if (!allFilesDeleted) {
+    return res.status(200).json({
+      message: 'Document database record deleted, but physical file cleanup was incomplete.',
+      deleted_document_id: documentId,
+      database_deleted: true,
+      files_cleaned: false,
+      cleanup_warnings: cleanupWarnings
+    });
+  }
+
+  return res.status(200).json({
+    message: 'Document deleted successfully.',
+    deleted_document_id: documentId,
+    database_deleted: true,
+    files_cleaned: true
+  });
+});
+
 router.post('/upload', uploadSingleFile, async (req, res) => {
   if (!req.file) {
     return res.status(400).json({
@@ -243,7 +386,6 @@ router.post('/upload', uploadSingleFile, async (req, res) => {
   const rawMimeType = (req.file.mimetype || '').split(';')[0].trim().toLowerCase();
 
   try {
-    // 1. Enforce non-zero file size
     if (req.file.size === 0) {
       await safeDeleteFile(filePath);
       return res.status(400).json({
@@ -251,7 +393,6 @@ router.post('/upload', uploadSingleFile, async (req, res) => {
       });
     }
 
-    // 2. Enforce explicit file extension allowlist
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
       await safeDeleteFile(filePath);
       return res.status(400).json({
@@ -259,7 +400,6 @@ router.post('/upload', uploadSingleFile, async (req, res) => {
       });
     }
 
-    // 3. Enforce MIME type allowlist
     const allowedMimes = ALLOWED_MIME_TYPES[ext];
     if (!allowedMimes || !allowedMimes.includes(rawMimeType)) {
       await safeDeleteFile(filePath);
@@ -268,7 +408,6 @@ router.post('/upload', uploadSingleFile, async (req, res) => {
       });
     }
 
-    // 4. Enforce file signature (magic bytes) & container integrity
     const signatureCheck = await validateFileSignature(filePath, ext);
     if (!signatureCheck.valid) {
       await safeDeleteFile(filePath);
@@ -279,9 +418,17 @@ router.post('/upload', uploadSingleFile, async (req, res) => {
 
     const fileType = signatureCheck.fileType;
 
-    // 5. Insert metadata into PostgreSQL using parameterized query
+    let categoryId = null;
+    if (req.body && req.body.category_id) {
+      const rawCatId = String(req.body.category_id).trim();
+      if (/^\d+$/.test(rawCatId) && Number.isSafeInteger(Number(rawCatId)) && Number(rawCatId) > 0) {
+        categoryId = Number(rawCatId);
+      }
+    }
+
     const insertSql = `
       INSERT INTO documents (
+        category_id,
         original_name,
         stored_filename,
         mime_type,
@@ -290,9 +437,10 @@ router.post('/upload', uploadSingleFile, async (req, res) => {
         status,
         created_at,
         updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
       RETURNING
         id,
+        category_id,
         original_name,
         file_size,
         file_type,
@@ -303,6 +451,7 @@ router.post('/upload', uploadSingleFile, async (req, res) => {
     `;
 
     const values = [
+      categoryId,
       originalName.slice(0, 255),
       req.file.filename,
       rawMimeType,
@@ -315,7 +464,6 @@ router.post('/upload', uploadSingleFile, async (req, res) => {
     try {
       dbResult = await pool.query(insertSql, values);
     } catch (dbError) {
-      // Remove uploaded file on DB failure to avoid orphaned files
       await safeDeleteFile(filePath);
       console.error('Database insertion failed:', dbError);
       return res.status(500).json({
@@ -342,11 +490,11 @@ router.post('/upload', uploadSingleFile, async (req, res) => {
       console.error('Could not record document upload history:', historyError);
     }
 
-    // 6. Return response with metadata and NO filesystem paths
     return res.status(201).json({
       message: 'Document uploaded successfully',
       document: {
         id: newDoc.id,
+        category_id: newDoc.category_id,
         original_name: newDoc.original_name,
         file_size: Number(newDoc.file_size),
         file_type: newDoc.file_type,
@@ -357,7 +505,6 @@ router.post('/upload', uploadSingleFile, async (req, res) => {
       }
     });
   } catch (error) {
-    // Catch-all cleanup to guarantee no orphaned files on disk
     await safeDeleteFile(filePath);
     console.error('Unhandled upload processing error:', error);
     return res.status(500).json({

@@ -10,6 +10,9 @@ Readify is a document-processing application that turns uploaded PDFs, Word docu
 - Use OCR for scanned or mixed PDFs and image uploads.
 - Preview extracted text and retry document processing when needed.
 - Generate and download TXT and DOCX output files.
+- Search documents by filename or extracted text content.
+- Filter documents by status, file type, and category.
+- Delete documents with cascading cleanup of database records and physical files.
 - Keep document status, processing details, and activity history in PostgreSQL.
 - Use a responsive, audio-console-inspired interface.
 
@@ -165,15 +168,79 @@ Open the frontend URL in your browser. Keep the terminal running while using the
 | Method | Endpoint | Purpose |
 |---|---|---|
 | `GET` | `/api/health` | Check whether the API is running |
-| `GET` | `/api/documents` | List stored documents |
+| `GET` | `/api/documents` | List stored documents (supports `?search=`, `?status=`, `?type=`, `?category_id=`) |
 | `GET` | `/api/documents/stats` | Get document statistics |
 | `GET` | `/api/documents/:id` | Get one document and its details |
 | `GET` | `/api/documents/:id/history` | Get the document activity history |
-| `POST` | `/api/documents/upload` | Upload a file (`multipart/form-data`, field name: `file`) |
+| `POST` | `/api/documents/upload` | Upload a file (`multipart/form-data`, field name: `file`, optional `category_id`) |
 | `POST` | `/api/documents/:id/process` | Process or retry a document |
 | `POST` | `/api/documents/:id/convert` | Generate TXT and DOCX outputs |
 | `GET` | `/api/documents/:id/download/txt` | Download the TXT output |
 | `GET` | `/api/documents/:id/download/docx` | Download the DOCX output |
+| `DELETE` | `/api/documents/:id` | Delete a document, its database records, and generated output files |
+
+### Document Search and Filtering (`GET /api/documents`)
+
+The document listing endpoint supports multi-criteria search and filtering through query parameters:
+
+- `search` (string): Case-insensitive search matching against `original_name` or `extracted_text`.
+- `status` (string): Filter by document status. Allowed values: `uploaded`, `processing`, `completed`, `failed`.
+- `type` (string): Filter by document format. Allowed values: `pdf`, `docx`, `png`, `jpg`, `jpeg`.
+- `category_id` (integer): Filter by assigned category identifier (positive integer).
+
+Filters can be used independently or combined. When combined, all criteria are applied together with `AND`.
+
+#### Example Request
+```http
+GET /api/documents?status=completed&type=pdf&category_id=1&search=invoice HTTP/1.1
+Host: localhost:5001
+```
+
+#### Example Response (HTTP 200 OK)
+```json
+[
+  {
+    "id": 14,
+    "category_id": 1,
+    "original_name": "crud_invoice_alpha_8471.pdf",
+    "file_size": 1024,
+    "file_type": "pdf",
+    "mime_type": "application/pdf",
+    "is_scanned": false,
+    "status": "completed",
+    "ocr_engine": null,
+    "has_txt_output": false,
+    "has_docx_output": false,
+    "extracted_character_count": 61,
+    "created_at": "2026-11-13T11:25:00.000Z",
+    "updated_at": "2026-11-13T11:25:00.000Z"
+  }
+]
+```
+
+### Document Deletion (`DELETE /api/documents/:id`)
+
+Deletes the specified document:
+1. Validates the provided ID parameter (must be a positive integer).
+2. Verifies the document exists in PostgreSQL (returns HTTP 404 if not found).
+3. Removes the document record from PostgreSQL. Foreign key cascade (`ON DELETE CASCADE`) automatically removes associated rows in `document_events` and `document_summaries`.
+4. Safely removes the uploaded file from `uploads/` and generated output files (`.txt`, `.docx`) from `outputs/`. Directory traversal is prevented through path containment checks. Missing physical files are handled gracefully without errors.
+
+#### Example Request
+```http
+DELETE /api/documents/14 HTTP/1.1
+Host: localhost:5001
+```
+
+#### Example Response (HTTP 200 OK)
+```json
+{
+  "message": "Document deleted successfully.",
+  "deleted_document_id": 14,
+  "database_deleted": true,
+  "files_cleaned": true
+}
+```
 
 ## Database Architecture (Data Engineering)
 
@@ -294,11 +361,12 @@ psql -d readify_db -f server/db/demonstration_queries.sql
 
 ## Verification scripts
 
-The `scripts/` directory contains focused verification scripts for document processing, export generation, processing API behaviour, processing safety, conversion API behaviour, document history, and database demonstration queries.
+The `scripts/` directory contains focused verification scripts for document processing, export generation, processing API behaviour, processing safety, conversion API behaviour, document history, database demonstration queries, and CRUD search/deletion:
 
 Run an individual script from the project root with Node.js. For example:
 
 ```bash
+node scripts/test-crud-search.js
 node scripts/test-database-queries.js
 node scripts/verify-document-processor.js
 node scripts/test-document-exporter.js
@@ -326,6 +394,7 @@ The following is the project's development history, in chronological order:
 | `d71f0f3` | 2026-11-03 | Added the export interface, conversion/check-repair actions, TXT/DOCX download controls, and user notifications. |
 | `482ce37` | 2026-11-03 | Improved responsive layout, constrained the application to the viewport, and made the document table scroll internally on smaller screens. |
 | `f144def` | 2026-11-07 | Added document activity history, the `document_events` table, history API and logging utility, timeline interface, and history tests. |
+| `887e6b6` | 2026-11-12 | Expanded PostgreSQL relational schema with categories and summaries, added constraints, and created 34-statement DE SQL demonstration suite. |
 
 ## Implementation Roadmap
 
@@ -333,8 +402,9 @@ The following is the project's development history, in chronological order:
 - [x] **Day 2**: File Ingestion (Multer), Validation (PDF, DOCX, PNG, JPG, JPEG) & Document Tracking
 - [x] **Day 3**: Document Processing Engine (pdfjs-dist, tesseract.js OCR, mammoth) & Text Extraction
 - [x] **Day 4**: Output Generation (TXT, DOCX via docx library), Download Endpoints & Export Controls
+- [x] **Day 5**: Document Activity History, Timeline Interface & History Tracking
 - [x] **Data Engineering**: Relational Schema Expansion (`categories`, `document_summaries`), Foreign Keys, Constraints, and 34-Statement SQL Demonstration Suite
-- [ ] **Next**: Document Deletion, Multi-Criteria Search & Filtering (Status, Format, Category)
+- [x] **Backend API (ASD)**: Multi-Criteria Document Search & Filtering (`?search`, `?status`, `?type`, `?category_id`), Secure Deletion (`DELETE /api/documents/:id`), and File Cleanup
 - [ ] **Next**: Document Summary Endpoints & Relational Analytics
 - [ ] **Next**: Frontend Console Polish for Search, Filter, Deletion, and Summary Viewing
 
