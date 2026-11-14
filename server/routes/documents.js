@@ -275,6 +275,117 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+router.patch('/:id', async (req, res) => {
+  const idValue = req.params.id;
+
+  if (!/^\d+$/.test(idValue) || !Number.isSafeInteger(Number(idValue)) || Number(idValue) < 1) {
+    return res.status(400).json({ error: 'Invalid document ID.' });
+  }
+
+  const documentId = Number(idValue);
+
+  if (req.body?.extracted_text === undefined || typeof req.body.extracted_text !== 'string') {
+    return res.status(400).json({
+      error: 'Invalid request body. Expected "extracted_text" string parameter.'
+    });
+  }
+
+  const updatedText = req.body.extracted_text;
+  const characterCount = updatedText.length;
+  const wordCount = updatedText.trim()
+    ? updatedText.trim().split(/\s+/u).length
+    : 0;
+
+  try {
+    const existing = await pool.query(
+      'SELECT id, original_name, status, txt_output_path, docx_output_path FROM documents WHERE id = $1',
+      [documentId]
+    );
+
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Document not found.' });
+    }
+
+    const doc = existing.rows[0];
+
+    // Clean up previous stale output files since the source text changed
+    if (doc.txt_output_path) {
+      const safeTxt = path.basename(doc.txt_output_path);
+      await safeDeleteFile(path.resolve(outputsDir, safeTxt)).catch(() => {});
+    }
+    if (doc.docx_output_path) {
+      const safeDocx = path.basename(doc.docx_output_path);
+      await safeDeleteFile(path.resolve(outputsDir, safeDocx)).catch(() => {});
+    }
+
+    const updateSql = `
+      UPDATE documents
+      SET extracted_text = $1,
+          extracted_character_count = $2,
+          extracted_word_count = $3,
+          txt_output_path = NULL,
+          docx_output_path = NULL,
+          updated_at = NOW()
+      WHERE id = $4
+      RETURNING
+        id,
+        category_id,
+        original_name,
+        file_size,
+        file_type,
+        mime_type,
+        is_scanned,
+        status,
+        ocr_engine,
+        extracted_text,
+        extracted_character_count,
+        extracted_word_count,
+        error_message,
+        processing_time_ms,
+        (txt_output_path IS NOT NULL) AS has_txt_output,
+        (docx_output_path IS NOT NULL) AS has_docx_output,
+        created_at,
+        updated_at;
+    `;
+
+    const result = await pool.query(updateSql, [
+      updatedText,
+      characterCount,
+      wordCount,
+      documentId
+    ]);
+
+    const updatedDoc = result.rows[0];
+
+    try {
+      await recordDocumentEvent(
+        pool,
+        documentId,
+        'processing_completed',
+        'Extracted text manually edited and saved.',
+        {
+          extracted_character_count: characterCount,
+          extracted_word_count: wordCount
+        }
+      );
+    } catch (_) {}
+
+    return res.status(200).json({
+      message: 'Document extracted text updated successfully.',
+      document: {
+        ...updatedDoc,
+        file_size: Number(updatedDoc.file_size)
+      }
+    });
+  } catch (err) {
+    console.error('Failed to update document text:', err);
+    return res.status(500).json({
+      error: 'Failed to update document text.',
+      details: err.message
+    });
+  }
+});
+
 router.delete('/:id', async (req, res) => {
   const idValue = req.params.id;
 

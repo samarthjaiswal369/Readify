@@ -21,7 +21,9 @@ import {
   Search,
   Filter,
   RotateCcw,
-  Tag
+  Tag,
+  Edit3,
+  Save
 } from 'lucide-react';
 
 function formatFileSize(bytes) {
@@ -86,6 +88,11 @@ export default function App() {
   const [historyEvents, setHistoryEvents] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState(null);
+
+  const [isEditingText, setIsEditingText] = useState(false);
+  const [editedTextValue, setEditedTextValue] = useState('');
+  const [savingText, setSavingText] = useState(false);
+  const [saveTextNotice, setSaveTextNotice] = useState(null);
 
   const addLog = (msg) => {
     const now = new Date().toTimeString().split(' ')[0];
@@ -200,6 +207,9 @@ export default function App() {
         has_txt_output: false,
         has_docx_output: false
       });
+      setEditedTextValue(data.document.extracted_text || '');
+      setIsEditingText(false);
+      setSaveTextNotice(null);
       setPreviewProcessing(data.processing || null);
       setPreviewError(null);
       setPreviewOpen(true);
@@ -245,6 +255,9 @@ export default function App() {
       }
 
       setPreviewDocument(data);
+      setEditedTextValue(data.extracted_text || '');
+      setIsEditingText(false);
+      setSaveTextNotice(null);
       await fetchDocumentHistory(documentId);
     } catch (error) {
       setPreviewError(error.message);
@@ -316,6 +329,62 @@ export default function App() {
     setPreviewError(null);
     setHistoryEvents([]);
     setHistoryError(null);
+    setIsEditingText(false);
+    setEditedTextValue('');
+    setSaveTextNotice(null);
+  };
+
+  const handleSaveEditedText = async () => {
+    if (!previewDocument || savingText) return;
+
+    setSavingText(true);
+    setSaveTextNotice(null);
+
+    try {
+      const response = await fetch(`/api/documents/${previewDocument.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ extracted_text: editedTextValue })
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to save updated text.');
+      }
+
+      setPreviewDocument(current => ({
+        ...current,
+        ...data.document
+      }));
+
+      setDocuments(current => current.map(doc =>
+        doc.id === previewDocument.id
+          ? {
+              ...doc,
+              extracted_character_count: data.document.extracted_character_count,
+              extracted_word_count: data.document.extracted_word_count,
+              has_txt_output: false,
+              has_docx_output: false
+            }
+          : doc
+      ));
+
+      setIsEditingText(false);
+      setSaveTextNotice({
+        type: 'success',
+        message: `TEXT SAVED FOR #${previewDocument.id}. OUTPUT BUS RESET FOR RE-CONVERSION.`
+      });
+      addLog(`TEXT EDITED // #${previewDocument.id} // ${data.document.extracted_character_count} CHARS SAVED`);
+      await fetchDocumentHistory(previewDocument.id);
+    } catch (err) {
+      setSaveTextNotice({
+        type: 'error',
+        message: `FAILED TO SAVE EDITS: ${err.message}`
+      });
+      addLog(`EDIT FAILED // #${previewDocument.id} // ${err.message}`);
+    } finally {
+      setSavingText(false);
+    }
   };
 
   const fetchDiagnostics = async () => {
@@ -1295,9 +1364,89 @@ export default function App() {
                       </div>
                     )}
 
-                    <pre className="document-preview-text">
-                      {previewDocument.extracted_text || 'NO EXTRACTED TEXT AVAILABLE.'}
-                    </pre>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', marginTop: '12px' }}>
+                      <div className="mono" style={{ fontSize: '11px', color: '#8fa696', fontWeight: 600 }}>
+                        {isEditingText ? 'BUFFER EDIT MODE' : 'INSPECTION BUFFER'}
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {isEditingText ? (
+                          <>
+                            <button
+                              type="button"
+                              className="tactile-btn primary"
+                              style={{ fontSize: '11px', padding: '4px 10px' }}
+                              onClick={handleSaveEditedText}
+                              disabled={savingText}
+                            >
+                              {savingText ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />}
+                              <span>{savingText ? 'SAVING...' : 'SAVE CHANGES'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="tactile-btn"
+                              style={{ fontSize: '11px', padding: '4px 10px' }}
+                              onClick={() => {
+                                setIsEditingText(false);
+                                setEditedTextValue(previewDocument.extracted_text || '');
+                                setSaveTextNotice(null);
+                              }}
+                              disabled={savingText}
+                            >
+                              <span>CANCEL</span>
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="tactile-btn"
+                            style={{ fontSize: '11px', padding: '4px 10px' }}
+                            onClick={() => {
+                              setEditedTextValue(previewDocument.extracted_text || '');
+                              setIsEditingText(true);
+                              setSaveTextNotice(null);
+                            }}
+                          >
+                            <Edit3 size={12} />
+                            <span>EDIT TEXT</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {saveTextNotice && (
+                      <div className={`telemetry-alert ${saveTextNotice.type}`} style={{ marginBottom: '8px' }}>
+                        {saveTextNotice.type === 'success' ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+                        <span>{saveTextNotice.message}</span>
+                        <button
+                          type="button"
+                          onClick={() => setSaveTextNotice(null)}
+                          style={{ marginLeft: 'auto', border: 0, background: 'transparent', cursor: 'pointer' }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
+
+                    {isEditingText ? (
+                      <textarea
+                        className="document-preview-text"
+                        style={{
+                          width: '100%',
+                          minHeight: '220px',
+                          resize: 'vertical',
+                          outline: 'none',
+                          borderColor: '#5af0a2',
+                          boxShadow: 'inset 0 0 10px rgba(90, 240, 162, 0.2)'
+                        }}
+                        value={editedTextValue}
+                        onChange={(e) => setEditedTextValue(e.target.value)}
+                        placeholder="ENTER OR EDIT EXTRACTED TEXT..."
+                      />
+                    ) : (
+                      <pre className="document-preview-text">
+                        {previewDocument.extracted_text || 'NO EXTRACTED TEXT AVAILABLE.'}
+                      </pre>
+                    )}
 
                     {previewProcessing?.warnings?.length > 0 && (
                       <div className="telemetry-alert error" style={{ marginTop: '12px' }}>
