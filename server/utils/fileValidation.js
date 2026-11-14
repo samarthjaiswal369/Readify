@@ -16,18 +16,15 @@ export const ALLOWED_MIME_TYPES = {
   '.jpeg': ['image/jpeg', 'image/pjpeg', 'image/jpg']
 };
 
-export const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024; // 15 MB
+export const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024;
 
-/**
- * Safely unlinks a file if it exists on disk, ignoring missing-file errors.
- */
 export async function safeDeleteFile(filePath) {
   if (!filePath) return;
   try {
     await fs.promises.unlink(filePath);
   } catch (err) {
     if (err.code !== 'ENOENT') {
-      console.error(`Warning: Failed to delete file at ${filePath}:`, err.message);
+      throw err;
     }
   }
 }

@@ -16,7 +16,12 @@ import {
   XCircle,
   FileCheck,
   Eye,
-  X
+  X,
+  Trash2,
+  Search,
+  Filter,
+  RotateCcw,
+  Tag
 } from 'lucide-react';
 
 function formatFileSize(bytes) {
@@ -51,13 +56,23 @@ export default function App() {
   const [txtOutputBus, setTxtOutputBus] = useState(true);
   const [docxOutputBus, setDocxOutputBus] = useState(true);
 
-  // File Upload State
   const [selectedFile, setSelectedFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);
   const [uploadSuccess, setUploadSuccess] = useState(null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const fileInputRef = useRef(null);
+
+  const [categories, setCategories] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documentsError, setDocumentsError] = useState(null);
+  const [deletingIds, setDeletingIds] = useState([]);
+  const [deletionNotice, setDeletionNotice] = useState(null);
 
   const [processingIds, setProcessingIds] = useState([]);
   const [processingNotice, setProcessingNotice] = useState(null);
@@ -80,15 +95,53 @@ export default function App() {
     ]);
   };
 
-  const fetchDocuments = async () => {
+  const fetchCategories = async () => {
     try {
-      const res = await fetch('/api/documents');
+      const res = await fetch('/api/categories');
       if (res.ok) {
         const data = await res.json();
-        setDocuments(data);
+        setCategories(Array.isArray(data) ? data : []);
       }
     } catch (err) {
-      console.error('Failed to fetch documents:', err);
+      console.error('Failed to fetch categories:', err);
+    }
+  };
+
+  const fetchDocuments = async (overrideParams = {}) => {
+    setDocumentsLoading(true);
+    setDocumentsError(null);
+    try {
+      const query = new URLSearchParams();
+      const currentSearch = overrideParams.search !== undefined ? overrideParams.search : searchTerm;
+      const currentStatus = overrideParams.status !== undefined ? overrideParams.status : statusFilter;
+      const currentType = overrideParams.type !== undefined ? overrideParams.type : typeFilter;
+      const currentCategory = overrideParams.category !== undefined ? overrideParams.category : categoryFilter;
+
+      if (currentSearch && currentSearch.trim()) {
+        query.append('search', currentSearch.trim());
+      }
+      if (currentStatus && currentStatus !== 'all') {
+        query.append('status', currentStatus);
+      }
+      if (currentType && currentType !== 'all') {
+        query.append('type', currentType);
+      }
+      if (currentCategory && currentCategory !== 'all') {
+        query.append('category_id', currentCategory);
+      }
+
+      const queryString = query.toString();
+      const url = queryString ? `/api/documents?${queryString}` : '/api/documents';
+      const res = await fetch(url);
+      const data = await res.json().catch(() => []);
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to fetch documents.');
+      }
+      setDocuments(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setDocumentsError(err.message);
+    } finally {
+      setDocumentsLoading(false);
     }
   };
 
@@ -283,8 +336,86 @@ export default function App() {
   useEffect(() => {
     if (powerOn) {
       fetchDiagnostics();
+      fetchCategories();
     }
   }, [powerOn]);
+
+  useEffect(() => {
+    if (!powerOn) return;
+    const timeoutId = setTimeout(() => {
+      fetchDocuments();
+    }, 250);
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, statusFilter, typeFilter, categoryFilter, powerOn]);
+
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('all');
+    setTypeFilter('all');
+    setCategoryFilter('all');
+    fetchDocuments({ search: '', status: 'all', type: 'all', category: 'all' });
+    addLog('FILTERS RESET // ALL CASSETTES MOUNTED');
+  };
+
+  const handleDeleteDocument = async (documentId, documentName) => {
+    if (deletingIds.includes(documentId)) return;
+
+    const confirmed = window.confirm(
+      `CONFIRM CASSETTE DELETION // DOCUMENT #${documentId}\n\n` +
+      `Filename: ${documentName || 'Unknown file'}\n\n` +
+      `This will delete the database record and associated physical files. Proceed?`
+    );
+    if (!confirmed) return;
+
+    setDeletingIds(prev => [...prev, documentId]);
+    setDeletionNotice(null);
+    addLog(`PURGING CASSETTE #${documentId} (${documentName})...`);
+
+    try {
+      const res = await fetch(`/api/documents/${documentId}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to delete document.');
+      }
+
+      if (previewDocument?.id === documentId) {
+        closePreview();
+      }
+
+      if (data.files_cleaned === false) {
+        const warningMsg = data.cleanup_warnings?.join('; ') || 'Some physical files could not be removed from storage.';
+        setDeletionNotice({
+          type: 'warning',
+          message: `DOCUMENT #${documentId} PURGED FROM DATABASE, BUT SOME PHYSICAL FILES COULD NOT BE REMOVED: ${warningMsg}`
+        });
+        addLog(`DELETION PARTIAL // #${documentId} DB RECORD PURGED, DISK FILES INCOMPLETE`);
+      } else {
+        setDeletionNotice({
+          type: 'success',
+          message: `DOCUMENT #${documentId} ("${documentName}") AND ALL ASSOCIATED FILES DELETED.`
+        });
+        addLog(`DELETION OK // #${documentId} CASSETTE PURGED FROM ARCHIVE`);
+      }
+
+      await fetchDocuments();
+      const statsRes = await fetch('/api/documents/stats');
+      if (statsRes.ok) {
+        const statsJson = await statsRes.json();
+        setStatsData(statsJson);
+      }
+    } catch (err) {
+      setDeletionNotice({
+        type: 'error',
+        message: `DOCUMENT #${documentId} DELETION FAILED: ${err.message}`
+      });
+      addLog(`DELETION FAILED // #${documentId} // ${err.message}`);
+    } finally {
+      setDeletingIds(prev => prev.filter(id => id !== documentId));
+    }
+  };
 
   const handleSelectFile = (files) => {
     if (!files || files.length === 0) return;
@@ -315,6 +446,7 @@ export default function App() {
 
   const clearSelectedFile = () => {
     setSelectedFile(null);
+    setSelectedCategoryId('');
     setUploadError(null);
     setUploadSuccess(null);
     if (fileInputRef.current) {
@@ -326,7 +458,6 @@ export default function App() {
   const handleUpload = async () => {
     if (uploading || !selectedFile) return;
 
-    // Client-side quick check for 15 MB limit
     const MAX_SIZE = 15 * 1024 * 1024;
     if (selectedFile.size > MAX_SIZE) {
       const err = `File size exceeds the 15 MB limit (${formatFileSize(selectedFile.size)}).`;
@@ -335,7 +466,6 @@ export default function App() {
       return;
     }
 
-    // Client-side quick check for format
     const ext = selectedFile.name.split('.').pop().toLowerCase();
     const allowed = ['pdf', 'docx', 'png', 'jpg', 'jpeg'];
     if (!allowed.includes(ext)) {
@@ -353,6 +483,9 @@ export default function App() {
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
+      if (selectedCategoryId) {
+        formData.append('category_id', selectedCategoryId);
+      }
 
       const response = await fetch('/api/documents/upload', {
         method: 'POST',
@@ -368,10 +501,10 @@ export default function App() {
       } else {
         setUploadSuccess(data.document);
         setSelectedFile(null);
+        setSelectedCategoryId('');
         if (fileInputRef.current) fileInputRef.current.value = '';
         addLog(`OK // CASSETTE REGISTERED [ID #${data.document.id}] (${data.document.original_name})`);
 
-        // Refresh real data from PostgreSQL
         await fetchDiagnostics();
       }
     } catch (networkError) {
@@ -540,6 +673,24 @@ export default function App() {
                     </div>
                   )}
 
+                  <div style={{ marginTop: '6px' }}>
+                    <label className="mono" style={{ fontSize: '10px', color: '#666', display: 'block', marginBottom: '3px' }}>
+                      CLASSIFICATION CATEGORY:
+                    </label>
+                    <select
+                      className="console-select"
+                      style={{ width: '100%', fontSize: '11px', padding: '5px 8px' }}
+                      value={selectedCategoryId}
+                      onChange={(e) => setSelectedCategoryId(e.target.value)}
+                      disabled={uploading}
+                    >
+                      <option value="">[AUTO / UNASSIGNED]</option>
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
                     <button 
                       type="button"
@@ -683,35 +834,188 @@ export default function App() {
               </div>
             </div>
 
-              {conversionNotice && (
-                <div
-                  className={`telemetry-alert ${conversionNotice.type}`}
-                  role={conversionNotice.type === 'error' ? 'alert' : 'status'}
-                  style={{ marginTop: '8px', marginBottom: '10px', width: '100%' }}
+            {deletionNotice && (
+              <div
+                className={`telemetry-alert ${deletionNotice.type}`}
+                role="status"
+                style={{ marginTop: '8px', marginBottom: '10px', width: '100%' }}
+              >
+                {deletionNotice.type === 'success' ? (
+                  <CheckCircle2 size={14} style={{ flexShrink: 0 }} />
+                ) : (
+                  <AlertTriangle size={14} style={{ flexShrink: 0 }} />
+                )}
+                <span>{deletionNotice.message}</span>
+                <button
+                  type="button"
+                  onClick={() => setDeletionNotice(null)}
+                  aria-label="Dismiss deletion message"
+                  style={{ marginLeft: 'auto', border: 0, background: 'transparent', cursor: 'pointer' }}
                 >
-                  {conversionNotice.type === 'success'
-                    ? <CheckCircle2 size={14} />
-                    : <AlertTriangle size={14} />}
-                  <span>{conversionNotice.message}</span>
+                  ×
+                </button>
+              </div>
+            )}
+
+            {conversionNotice && (
+              <div
+                className={`telemetry-alert ${conversionNotice.type}`}
+                role={conversionNotice.type === 'error' ? 'alert' : 'status'}
+                style={{ marginTop: '8px', marginBottom: '10px', width: '100%' }}
+              >
+                {conversionNotice.type === 'success'
+                  ? <CheckCircle2 size={14} />
+                  : <AlertTriangle size={14} />}
+                <span>{conversionNotice.message}</span>
+                <button
+                  type="button"
+                  onClick={() => setConversionNotice(null)}
+                  aria-label="Dismiss conversion message"
+                  style={{ marginLeft: 'auto', border: 0, background: 'transparent', cursor: 'pointer' }}
+                >
+                  ×
+                </button>
+              </div>
+            )}
+
+            <div className="console-filter-rack">
+              <div className="filter-control-group grow">
+                <label className="filter-control-label">
+                  <Search size={11} />
+                  <span>SEARCH REPOSITORY</span>
+                </label>
+                <div className="console-search-wrapper">
+                  <Search size={13} className="console-search-icon" />
+                  <input
+                    type="text"
+                    className="console-input"
+                    placeholder="SEARCH BY FILENAME OR EXTRACTED TEXT..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      className="console-search-clear"
+                      onClick={() => setSearchTerm('')}
+                      aria-label="Clear search input"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="filter-control-group">
+                <label className="filter-control-label">
+                  <Filter size={11} />
+                  <span>STATUS</span>
+                </label>
+                <select
+                  className="console-select"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="all">ALL STATUSES</option>
+                  <option value="uploaded">UPLOADED</option>
+                  <option value="processing">PROCESSING</option>
+                  <option value="completed">COMPLETED</option>
+                  <option value="failed">FAILED</option>
+                </select>
+              </div>
+
+              <div className="filter-control-group">
+                <label className="filter-control-label">
+                  <FileText size={11} />
+                  <span>FILE TYPE</span>
+                </label>
+                <select
+                  className="console-select"
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                >
+                  <option value="all">ALL TYPES</option>
+                  <option value="pdf">PDF</option>
+                  <option value="docx">DOCX</option>
+                  <option value="png">PNG</option>
+                  <option value="jpg">JPG</option>
+                  <option value="jpeg">JPEG</option>
+                </select>
+              </div>
+
+              <div className="filter-control-group">
+                <label className="filter-control-label">
+                  <Tag size={11} />
+                  <span>CATEGORY</span>
+                </label>
+                <select
+                  className="console-select"
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                >
+                  <option value="all">ALL CATEGORIES</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name.toUpperCase()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {(searchTerm || statusFilter !== 'all' || typeFilter !== 'all' || categoryFilter !== 'all') && (
+                <div className="filter-control-group" style={{ alignSelf: 'flex-end' }}>
                   <button
                     type="button"
-                    onClick={() => setConversionNotice(null)}
-                    aria-label="Dismiss conversion message"
-                    style={{ marginLeft: 'auto', border: 0, background: 'transparent', cursor: 'pointer' }}
+                    className="tactile-btn"
+                    onClick={handleClearFilters}
+                    title="Reset all search filters"
                   >
-                    ×
+                    <RotateCcw size={12} />
+                    <span>RESET</span>
                   </button>
                 </div>
               )}
+            </div>
 
             <div className="console-table-container">
-              {documents.length === 0 ? (
+              {documentsLoading ? (
+                <div style={{ padding: '28px', textAlign: 'center', color: '#5af0a2', fontFamily: "'Chivo Mono', monospace", fontSize: '11px' }}>
+                  <RefreshCw size={18} className="animate-spin" style={{ margin: '0 auto 8px', display: 'block' }} />
+                  <div>SCANNING CASSETTE REPOSITORY...</div>
+                </div>
+              ) : documentsError ? (
+                <div className="telemetry-alert error" style={{ margin: '14px' }}>
+                  <AlertTriangle size={14} />
+                  <span>{documentsError}</span>
+                </div>
+              ) : documents.length === 0 ? (
                 <div style={{ padding: '28px', textAlign: 'center', color: '#777', fontFamily: "'Chivo Mono', monospace", fontSize: '11px' }}>
-                  <FileText size={22} color="#555" style={{ margin: '0 auto 8px' }} />
-                  <div>NO CASSETTES IN STORAGE BAY</div>
-                  <div style={{ fontSize: '10px', color: '#555', marginTop: '4px' }}>
-                    Insert and ingest a PDF, DOCX, or Image in Bay 01 to populate repository.
-                  </div>
+                  {searchTerm || statusFilter !== 'all' || typeFilter !== 'all' || categoryFilter !== 'all' ? (
+                    <>
+                      <Search size={22} color="#555" style={{ margin: '0 auto 8px' }} />
+                      <div>NO CASSETTES MATCH FILTER CRITERIA</div>
+                      <div style={{ fontSize: '10px', color: '#555', marginTop: '4px' }}>
+                        Modify query parameters or reset all filters to view repository.
+                      </div>
+                      <button
+                        type="button"
+                        className="tactile-btn"
+                        style={{ marginTop: '10px' }}
+                        onClick={handleClearFilters}
+                      >
+                        <RotateCcw size={12} />
+                        <span>RESET FILTERS</span>
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <FileText size={22} color="#555" style={{ margin: '0 auto 8px' }} />
+                      <div>NO CASSETTES IN STORAGE BAY</div>
+                      <div style={{ fontSize: '10px', color: '#555', marginTop: '4px' }}>
+                        Insert and ingest a PDF, DOCX, or Image in Bay 01 to populate repository.
+                      </div>
+                    </>
+                  )}
                 </div>
               ) : (
                 <table className="console-table">
@@ -719,6 +1023,7 @@ export default function App() {
                     <tr>
                       <th>ID</th>
                       <th>ORIGINAL FILENAME</th>
+                      <th>CATEGORY</th>
                       <th>TYPE</th>
                       <th>SIZE</th>
                       <th>INGEST STATUS</th>
@@ -732,6 +1037,11 @@ export default function App() {
                       <tr key={doc.id}>
                         <td style={{ color: '#5af0a2', fontWeight: 700 }}>#{doc.id}</td>
                         <td style={{ fontWeight: 600, color: '#f7f4ec' }}>{doc.original_name}</td>
+                        <td>
+                          <span className="cartridge-badge" style={{ background: '#363d38' }}>
+                            {doc.category_name || 'GENERAL'}
+                          </span>
+                        </td>
                         <td>
                           <span className="cartridge-badge">
                             {(doc.file_type || 'file').toUpperCase()}
@@ -754,76 +1064,93 @@ export default function App() {
                           )}
                         </td>
                         <td style={{ color: '#8fa696' }}>{formatDate(doc.created_at)}</td>
-                        <td className={doc.status === 'completed' ? 'document-actions-cell' : ''}>
-                          {doc.status === 'completed' ? (
-                            <div className="document-action-group document-action-group-table">
-                              <button
-                                type="button"
-                                className="tactile-btn document-action-btn"
-                                onClick={() => handleViewText(doc.id)}
-                              >
-                                <Eye size={12} />
-                                VIEW TEXT
-                              </button>
+                        <td className="document-actions-cell">
+                          <div className="document-action-group document-action-group-table">
+                            {doc.status === 'completed' ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="tactile-btn document-action-btn"
+                                  onClick={() => handleViewText(doc.id)}
+                                >
+                                  <Eye size={12} />
+                                  VIEW TEXT
+                                </button>
 
+                                <button
+                                  type="button"
+                                  className="tactile-btn document-action-btn primary"
+                                  onClick={() => handleConvertDocument(doc.id)}
+                                  disabled={convertingIds.includes(doc.id)}
+                                >
+                                  {convertingIds.includes(doc.id)
+                                    ? <RefreshCw size={12} className="animate-spin" />
+                                    : <FileCheck size={12} />}
+                                  {convertingIds.includes(doc.id)
+                                    ? 'CONVERTING'
+                                    : doc.has_txt_output || doc.has_docx_output
+                                      ? 'CHECK / REPAIR'
+                                      : 'CONVERT'}
+                                </button>
+
+                                {doc.has_txt_output && txtOutputBus && (
+                                  <a
+                                    className="tactile-btn document-action-btn document-action-link"
+                                    href={`/api/documents/${doc.id}/download/txt`}
+                                    download
+                                    title="Download plain text"
+                                  >
+                                    <Download size={12} />
+                                    TXT
+                                  </a>
+                                )}
+
+                                {doc.has_docx_output && docxOutputBus && (
+                                  <a
+                                    className="tactile-btn document-action-btn document-action-link"
+                                    href={`/api/documents/${doc.id}/download/docx`}
+                                    download
+                                    title="Download Word document"
+                                  >
+                                    <Download size={12} />
+                                    DOCX
+                                  </a>
+                                )}
+                              </>
+                            ) : (
                               <button
                                 type="button"
                                 className="tactile-btn document-action-btn primary"
-                                onClick={() => handleConvertDocument(doc.id)}
-                                disabled={convertingIds.includes(doc.id)}
+                                onClick={() => handleProcessDocument(doc.id)}
+                                disabled={doc.status === 'processing' || processingIds.includes(doc.id)}
                               >
-                                {convertingIds.includes(doc.id)
-                                  ? <RefreshCw size={12} className="animate-spin" />
-                                  : <FileCheck size={12} />}
-                                {convertingIds.includes(doc.id)
-                                  ? 'CONVERTING'
-                                  : doc.has_txt_output || doc.has_docx_output
-                                    ? 'CHECK / REPAIR'
-                                    : 'CONVERT'}
+                                <RefreshCw
+                                  size={12}
+                                  className={processingIds.includes(doc.id) ? 'animate-spin' : ''}
+                                />
+                                {processingIds.includes(doc.id) || doc.status === 'processing'
+                                  ? 'PROCESSING'
+                                  : doc.status === 'failed'
+                                    ? 'RETRY'
+                                    : 'PROCESS'}
                               </button>
+                            )}
 
-                              {doc.has_txt_output && txtOutputBus && (
-                                <a
-                                  className="tactile-btn document-action-btn document-action-link"
-                                  href={`/api/documents/${doc.id}/download/txt`}
-                                  download
-                                  title="Download plain text"
-                                >
-                                  <Download size={12} />
-                                  TXT
-                                </a>
-                              )}
-
-                              {doc.has_docx_output && docxOutputBus && (
-                                <a
-                                  className="tactile-btn document-action-btn document-action-link"
-                                  href={`/api/documents/${doc.id}/download/docx`}
-                                  download
-                                  title="Download Word document"
-                                >
-                                  <Download size={12} />
-                                  DOCX
-                                </a>
-                              )}
-                            </div>
-                          ) : (
                             <button
                               type="button"
-                              className="tactile-btn document-action-btn primary"
-                              onClick={() => handleProcessDocument(doc.id)}
-                              disabled={doc.status === 'processing' || processingIds.includes(doc.id)}
+                              className="tactile-btn document-action-btn danger"
+                              onClick={() => handleDeleteDocument(doc.id, doc.original_name)}
+                              disabled={deletingIds.includes(doc.id)}
+                              title="Delete document cassette"
                             >
-                              <RefreshCw
-                                size={12}
-                                className={processingIds.includes(doc.id) ? 'animate-spin' : ''}
-                              />
-                              {processingIds.includes(doc.id) || doc.status === 'processing'
-                                ? 'PROCESSING'
-                                : doc.status === 'failed'
-                                  ? 'RETRY'
-                                  : 'PROCESS'}
+                              {deletingIds.includes(doc.id) ? (
+                                <RefreshCw size={11} className="animate-spin" />
+                              ) : (
+                                <Trash2 size={11} />
+                              )}
+                              <span>{deletingIds.includes(doc.id) ? 'DELETING' : 'DELETE'}</span>
                             </button>
-                          )}
+                          </div>
                         </td>
                       </tr>
                     ))}

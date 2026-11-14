@@ -9,6 +9,7 @@ import healthRouter from './routes/health.js';
 import documentsRouter from './routes/documents.js';
 import documentProcessingRouter from './routes/documentProcessing.js';
 import documentConversionRouter from './routes/documentConversion.js';
+import categoriesRouter from './routes/categories.js';
 
 dotenv.config();
 
@@ -32,6 +33,7 @@ app.use(cors());
 app.use(express.json());
 
 app.use('/api/health', healthRouter);
+app.use('/api/categories', categoriesRouter);
 app.use('/api/documents', documentsRouter);
 app.use('/api/documents', documentProcessingRouter);
 app.use('/api/documents', documentConversionRouter);

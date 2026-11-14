@@ -108,7 +108,7 @@ router.get('/', async (req, res) => {
       }
       if (trimmedSearch.length > 0) {
         params.push(`%${trimmedSearch}%`);
-        conditions.push(`(original_name ILIKE $${params.length} OR (extracted_text IS NOT NULL AND extracted_text ILIKE $${params.length}))`);
+        conditions.push(`(documents.original_name ILIKE $${params.length} OR (documents.extracted_text IS NOT NULL AND documents.extracted_text ILIKE $${params.length}))`);
       }
     }
 
@@ -124,7 +124,7 @@ router.get('/', async (req, res) => {
         });
       }
       params.push(normalizedStatus);
-      conditions.push(`status = $${params.length}`);
+      conditions.push(`documents.status = $${params.length}`);
     }
 
     if (type !== undefined) {
@@ -139,7 +139,7 @@ router.get('/', async (req, res) => {
         });
       }
       params.push(normalizedType);
-      conditions.push(`file_type = $${params.length}`);
+      conditions.push(`documents.file_type = $${params.length}`);
     }
 
     if (category_id !== undefined) {
@@ -148,29 +148,31 @@ router.get('/', async (req, res) => {
         return res.status(400).json({ error: 'Invalid category_id filter. Expected a positive integer.' });
       }
       params.push(Number(rawCategoryId));
-      conditions.push(`category_id = $${params.length}`);
+      conditions.push(`documents.category_id = $${params.length}`);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const sql = `
       SELECT
-        id,
-        category_id,
-        original_name,
-        file_size,
-        file_type,
-        mime_type,
-        is_scanned,
-        status,
-        ocr_engine,
-        (txt_output_path IS NOT NULL) AS has_txt_output,
-        (docx_output_path IS NOT NULL) AS has_docx_output,
-        extracted_character_count,
-        created_at,
-        updated_at
+        documents.id,
+        documents.category_id,
+        categories.name AS category_name,
+        documents.original_name,
+        documents.file_size,
+        documents.file_type,
+        documents.mime_type,
+        documents.is_scanned,
+        documents.status,
+        documents.ocr_engine,
+        (documents.txt_output_path IS NOT NULL) AS has_txt_output,
+        (documents.docx_output_path IS NOT NULL) AS has_docx_output,
+        documents.extracted_character_count,
+        documents.created_at,
+        documents.updated_at
       FROM documents
+      LEFT JOIN categories ON documents.category_id = categories.id
       ${whereClause}
-      ORDER BY created_at DESC
+      ORDER BY documents.created_at DESC
       LIMIT 50
     `;
 
@@ -351,7 +353,7 @@ router.delete('/:id', async (req, res) => {
       await safeDeleteFile(item.path);
     } catch (fileError) {
       allFilesDeleted = false;
-      cleanupWarnings.push(`Could not delete ${item.type} file: ${fileError.message}`);
+      cleanupWarnings.push(`Could not delete associated ${item.type} file.`);
     }
   }
 

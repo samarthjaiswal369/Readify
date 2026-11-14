@@ -270,6 +270,50 @@ async function run() {
     assert.equal(docxExists, false);
     console.log('PASS: Physical file cleanup in uploads/ and outputs/');
 
+    const lockedDirName = `crud_locked_${crypto.randomUUID()}`;
+    const lockedDirPath = path.join(uploadsDir, lockedDirName);
+    await fs.mkdir(lockedDirPath, { recursive: true });
+
+    const failedCleanupDoc = await pool.query(
+      `INSERT INTO documents (
+         category_id,
+         original_name,
+         stored_filename,
+         mime_type,
+         file_size,
+         file_type,
+         status
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id`,
+      [
+        testCategoryId,
+        'crud_failed_cleanup.pdf',
+        lockedDirName,
+        'application/pdf',
+        100,
+        'pdf',
+        'uploaded'
+      ]
+    );
+    const failedCleanupDocId = failedCleanupDoc.rows[0].id;
+
+    const failedCleanupRes = await fetch(`${baseUrl}/${failedCleanupDocId}`, {
+      method: 'DELETE'
+    });
+    assert.equal(failedCleanupRes.status, 200);
+    const failedCleanupData = await failedCleanupRes.json();
+    assert.equal(failedCleanupData.deleted_document_id, failedCleanupDocId);
+    assert.equal(failedCleanupData.database_deleted, true);
+    assert.equal(failedCleanupData.files_cleaned, false);
+    assert.ok(Array.isArray(failedCleanupData.cleanup_warnings));
+    assert.ok(failedCleanupData.cleanup_warnings.length > 0);
+
+    const failedDocCheck = await pool.query('SELECT id FROM documents WHERE id = $1', [failedCleanupDocId]);
+    assert.equal(failedDocCheck.rows.length, 0);
+
+    await fs.rmdir(lockedDirPath).catch(() => {});
+    console.log('PASS: Physical file cleanup failure reported correctly with database_deleted=true and files_cleaned=false');
+
     const deleteMissingDoc = await fetch(`${baseUrl}/999999999`, {
       method: 'DELETE'
     });
