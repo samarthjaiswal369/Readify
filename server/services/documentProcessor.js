@@ -182,27 +182,35 @@ export async function processPdf(input, options = {}) {
         pageText = pageText.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
         const nonWsChars = pageText.replace(/\s+/g, '').length;
 
-        if (nonWsChars < minTextThreshold) {
-          try {
-            const viewport = page.getViewport({ scale });
-            const canvas = createCanvas(Math.floor(viewport.width), Math.floor(viewport.height));
-            const ctx = canvas.getContext('2d');
+        const ocrEnabled = options.ocrEnabled ?? true;
+        const autoDetectScanned = options.autoDetectScanned ?? true;
 
-            await page.render({ canvasContext: ctx, viewport }).promise;
-            const renderedBuffer = canvas.toBuffer('image/png');
+        if (autoDetectScanned && nonWsChars < minTextThreshold) {
+          if (!ocrEnabled) {
+            warnings.push(`Page ${pageNum}: Scanned or low-text page detected, but OCR engine is disabled by configuration.`);
+            pagesText.push(pageText);
+          } else {
+            try {
+              const viewport = page.getViewport({ scale });
+              const canvas = createCanvas(Math.floor(viewport.width), Math.floor(viewport.height));
+              const ctx = canvas.getContext('2d');
 
-            const ocrRes = await recognizeWithOcr(renderedBuffer);
-            const ocrText = (ocrRes?.data?.text || '').trim();
+              await page.render({ canvasContext: ctx, viewport }).promise;
+              const renderedBuffer = canvas.toBuffer('image/png');
 
-            if (ocrText.length > 0) {
-              ocrPages.push(pageNum);
-              pagesText.push(ocrText);
-            } else {
+              const ocrRes = await recognizeWithOcr(renderedBuffer);
+              const ocrText = (ocrRes?.data?.text || '').trim();
+
+              if (ocrText.length > 0) {
+                ocrPages.push(pageNum);
+                pagesText.push(ocrText);
+              } else {
+                pagesText.push(pageText);
+              }
+            } catch (ocrErr) {
+              warnings.push(`Page ${pageNum}: OCR recognition failed (${ocrErr.message}). Falling back to extracted text.`);
               pagesText.push(pageText);
             }
-          } catch (ocrErr) {
-            warnings.push(`Page ${pageNum}: OCR recognition failed (${ocrErr.message}). Falling back to extracted text.`);
-            pagesText.push(pageText);
           }
         } else {
           pagesText.push(pageText);
@@ -297,6 +305,14 @@ export async function processImage(input, options = {}) {
 
   if (buffer.length === 0) {
     throw new DocumentProcessingError('Image file is empty (0 bytes).', 'EMPTY_FILE');
+  }
+
+  const ocrEnabled = options.ocrEnabled ?? true;
+  if (!ocrEnabled) {
+    throw new DocumentProcessingError(
+      'Cannot process image document: OCR processing is disabled by console switch.',
+      'OCR_DISABLED'
+    );
   }
 
   // Pre-validate image using @napi-rs/canvas loadImage to prevent unhandled worker errors

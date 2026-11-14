@@ -175,11 +175,18 @@ export default function App() {
       doc.id === documentId ? { ...doc, status: 'processing' } : doc
     ));
 
-    addLog(`PROCESSING DOCUMENT #${documentId}...`);
+    addLog(`PROCESSING DOCUMENT #${documentId} // OCR: ${ocrEngineMode ? 'ON' : 'OFF'} // AUTO-DETECT: ${autoDetectScanned ? 'ON' : 'OFF'}`);
 
     try {
       const response = await fetch(`/api/documents/${documentId}/process`, {
-        method: 'POST'
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          ocrEnabled: ocrEngineMode,
+          autoDetectScanned: autoDetectScanned
+        })
       });
 
       const data = await response.json().catch(() => ({}));
@@ -759,7 +766,11 @@ export default function App() {
                 <div 
                   className={`rocker-switch ${autoDetectScanned ? 'active' : ''}`}
                   style={{ width: '40px', height: '22px' }}
-                  onClick={() => setAutoDetectScanned(!autoDetectScanned)}
+                  onClick={() => {
+                    const nextVal = !autoDetectScanned;
+                    setAutoDetectScanned(nextVal);
+                    addLog(`BUS CONFIG // AUTO-DETECT SCANNED: ${nextVal ? 'ARMED' : 'BYPASS'}`);
+                  }}
                 >
                   <div className="rocker-knob" style={{ width: '16px', height: '16px' }}></div>
                 </div>
@@ -782,7 +793,11 @@ export default function App() {
                   <div 
                     className={`rocker-switch ${ocrEngineMode ? 'active' : ''}`}
                     style={{ width: '40px', height: '22px' }}
-                    onClick={() => setOcrEngineMode(!ocrEngineMode)}
+                    onClick={() => {
+                      const nextVal = !ocrEngineMode;
+                      setOcrEngineMode(nextVal);
+                      addLog(`BUS CONFIG // OCR CORE: ${nextVal ? 'ENGAGED' : 'DISENGAGED'}`);
+                    }}
                   >
                     <div className="rocker-knob" style={{ width: '16px', height: '16px' }}></div>
                   </div>

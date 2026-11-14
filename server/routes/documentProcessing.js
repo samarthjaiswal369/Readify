@@ -25,6 +25,9 @@ router.post('/:id/process', async (req, res) => {
   const documentId = Number(idValue);
   const startedAt = Date.now();
 
+  const ocrEnabled = req.body?.ocrEnabled !== undefined ? Boolean(req.body.ocrEnabled) : true;
+  const autoDetectScanned = req.body?.autoDetectScanned !== undefined ? Boolean(req.body.autoDetectScanned) : true;
+
   try {
     const claim = await pool.query(
       `UPDATE documents
@@ -72,7 +75,11 @@ router.post('/:id/process', async (req, res) => {
         documentId,
         'processing_started',
         'Document text extraction started.',
-        { file_type: document.file_type }
+        {
+          file_type: document.file_type,
+          ocr_enabled: ocrEnabled,
+          auto_detect_scanned: autoDetectScanned
+        }
       );
     } catch (historyError) {
       console.error('Could not record processing start history:', historyError);
@@ -114,7 +121,9 @@ router.post('/:id/process', async (req, res) => {
       const result = await processDocument(filePath, {
         fileType: document.file_type,
         mimeType: document.mime_type,
-        originalName: document.original_name
+        originalName: document.original_name,
+        ocrEnabled,
+        autoDetectScanned
       });
 
       const extractedText = result.text || '';
