@@ -411,7 +411,39 @@ The following is the project's development history, in chronological order:
 - [x] **Milestone 2 (Backend API / ASD)**: Multi-Criteria Document Search & Filtering (`?search`, `?status`, `?type`, `?category_id`), Secure Deletion (`DELETE /api/documents/:id`), and Physical File Cleanup Error Detection
 - [x] **Milestone 3 (Frontend Integration / ASD)**: Search Bar, Multi-Filter Rack, Dynamic Categories, Reset Controls, Delete Confirmation & Telemetry Cleanup Alerts
 - [x] **Milestone 4 (Final Integration & Documentation)**: End-to-End Workflow Verification, API & Architecture Documentation, and Evaluation Readiness
-- [ ] **Milestone 5 (Unity / ISD Integration)**: Interactive 3D / Unity Workstation Integration (Pending)
+- [x] **Milestone 5 (Unity / ISD Coursework)**: Readify: 2D Document Collector Game (Unity 2D, C# Physics, Spawners, Collision Handling, UI Manager)
+
+## Milestone 5: Readify 2D Document Collector Game (Unity / ISD)
+
+As part of the Interactive Systems Design (ISD) coursework, an interactive 2D top-down mini-game, **Readify: Document Collector**, is included in `unity/ReadifyDocumentCollector/`.
+
+### Game Overview & Objectives
+The player controls a collection unit across a 2D arena. The objective is to collect falling document pages while avoiding hazardous obstacles:
+- **Documents**: Small white document pages falling from the top of the screen. Touching a document awards **+1 score**.
+- **Obstacles**: Hazardous red obstacles falling from the top. Touching an obstacle costs **1 life** (player begins with 3 lives).
+- **Game Over**: Reaching 0 lives displays the Game Over screen showing the final score and a Restart option.
+
+### Controls
+| Key / Input | Action |
+|---|---|
+| `W` / `Up Arrow` | Move Up |
+| `S` / `Down Arrow` | Move Down |
+| `A` / `Left Arrow` | Move Left |
+| `D` / `Right Arrow` | Move Right |
+| `Space` / `Return` | Start game from Title Screen |
+| `R` / `Space` / `Return` | Restart game after Game Over |
+
+### Unity Concepts Demonstrated
+- **GameObject & Transform Hierarchy**: Composition of player, falling prefabs, spawners, cameras, and Canvas UI.
+- **2D Physics & Collision Detection**: `Rigidbody2D`, `BoxCollider2D`, `CircleCollider2D`, and trigger collision detection using `OnTriggerEnter2D`.
+- **C# Scripting Architecture**: Modular, beginner-friendly scripts without unnecessary abstractions:
+  - `PlayerController.cs`: 2D movement and boundary clamping using `Input.GetAxisRaw`.
+  - `FallingObject.cs`: Downward translation, off-screen cleanup, and trigger collision handling.
+  - `DocumentSpawner.cs`: Timed random-interval document instantiations.
+  - `ObstacleSpawner.cs`: Timed random-interval obstacle instantiations.
+  - `GameManager.cs`: Singleton game manager coordinating score, lives, UI state transitions, and scene restarts.
+- **Unity UI System**: Canvas Scaler (1080p reference), interactive HUD (Score and Lives), Start Title Panel, and Game Over Screen with Restart button.
+- **Automated Scene Setup**: `Assets/Editor/SceneSetup.cs` with `[MenuItem("Readify/Setup Scene")]` allowing one-click automated scene generation and prefab wiring.
 
 ## Working with the team
 
