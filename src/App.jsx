@@ -1712,11 +1712,10 @@ export default function App() {
             </div>
           )}
 
-          {/* 5-Day Project Roadmap Rack */}
           <div className="roadmap-container">
             <div className="strip-label">
               <span>5-DAY COLLEGE PROJECT PROGRESSION LOG</span>
-              <span className="mono" style={{ fontSize: '10px' }}>DAY 4 OF 5 ACTIVE</span>
+              <span className="mono" style={{ fontSize: '10px' }}>DAY 5 OF 5 COMPLETED</span>
             </div>
 
             <div className="roadmap-steps">
@@ -1747,7 +1746,7 @@ export default function App() {
                 <div style={{ fontSize: '10px', color: '#666' }}>pdfjs-dist digital text, tesseract.js OCR & mammoth.</div>
               </div>
 
-              <div className="step-card active">
+              <div className="step-card">
                 <div className="step-header">
                   <span className="led-lamp led-green"></span>
                   DAY 4: EXPORT BUS
@@ -1758,7 +1757,7 @@ export default function App() {
 
               <div className="step-card">
                 <div className="step-header">
-                  <span className="led-lamp led-off"></span>
+                  <span className="led-lamp led-green"></span>
                   DAY 5: POLISH & LOGS
                 </div>
                 <div style={{ fontWeight: 600 }}>History & Final Touch</div>
