@@ -43,8 +43,8 @@ Readify is a document-processing application that turns uploaded PDFs, Word docu
 ```text
 Readify/
 ├── server/
-│   ├── db/                 # PostgreSQL connection and database setup
-│   ├── routes/             # Health and document API routes
+│   ├── db/                 # PostgreSQL connection, schema, and demonstration queries
+│   ├── routes/             # Health, category, and document API routes
 │   ├── services/           # Document processing and export logic
 │   ├── utils/              # Shared backend utilities, including history logging
 │   └── server.js           # Express server entry point
@@ -168,6 +168,7 @@ Open the frontend URL in your browser. Keep the terminal running while using the
 | Method | Endpoint | Purpose |
 |---|---|---|
 | `GET` | `/api/health` | Check whether the API is running |
+| `GET` | `/api/categories` | List document classification categories |
 | `GET` | `/api/documents` | List stored documents (supports `?search=`, `?status=`, `?type=`, `?category_id=`) |
 | `GET` | `/api/documents/stats` | Get document statistics |
 | `GET` | `/api/documents/:id` | Get one document and its details |
@@ -368,6 +369,7 @@ Run an individual script from the project root with Node.js. For example:
 ```bash
 node scripts/test-crud-search.js
 node scripts/test-database-queries.js
+node scripts/verify-milestone4-workflow.js
 node scripts/verify-document-processor.js
 node scripts/test-document-exporter.js
 node scripts/test-processing-api.js
@@ -395,6 +397,8 @@ The following is the project's development history, in chronological order:
 | `482ce37` | 2026-11-03 | Improved responsive layout, constrained the application to the viewport, and made the document table scroll internally on smaller screens. |
 | `f144def` | 2026-11-07 | Added document activity history, the `document_events` table, history API and logging utility, timeline interface, and history tests. |
 | `887e6b6` | 2026-11-12 | Expanded PostgreSQL relational schema with categories and summaries, added constraints, and created 34-statement DE SQL demonstration suite. |
+| `c51128d` | 2026-11-13 | Added multi-criteria document search, filter validation, cascade deletion endpoint, and safe physical file cleanup. |
+| `33a7c12` | 2026-11-14 | Integrated search input, multi-filter patch bay, category dropdown, dynamic reset, and deletion UI with confirmation and cleanup alerts. |
 
 ## Implementation Roadmap
 
@@ -403,10 +407,11 @@ The following is the project's development history, in chronological order:
 - [x] **Day 3**: Document Processing Engine (pdfjs-dist, tesseract.js OCR, mammoth) & Text Extraction
 - [x] **Day 4**: Output Generation (TXT, DOCX via docx library), Download Endpoints & Export Controls
 - [x] **Day 5**: Document Activity History, Timeline Interface & History Tracking
-- [x] **Data Engineering**: Relational Schema Expansion (`categories`, `document_summaries`), Foreign Keys, Constraints, and 34-Statement SQL Demonstration Suite
-- [x] **Backend API (ASD)**: Multi-Criteria Document Search & Filtering (`?search`, `?status`, `?type`, `?category_id`), Secure Deletion (`DELETE /api/documents/:id`), and File Cleanup
-- [ ] **Next**: Document Summary Endpoints & Relational Analytics
-- [ ] **Next**: Frontend Console Polish for Search, Filter, Deletion, and Summary Viewing
+- [x] **Milestone 1 (Data Engineering)**: Relational Schema Expansion (`categories`, `document_summaries`), Foreign Keys, Constraints, and 34-Statement SQL Demonstration Suite
+- [x] **Milestone 2 (Backend API / ASD)**: Multi-Criteria Document Search & Filtering (`?search`, `?status`, `?type`, `?category_id`), Secure Deletion (`DELETE /api/documents/:id`), and Physical File Cleanup Error Detection
+- [x] **Milestone 3 (Frontend Integration / ASD)**: Search Bar, Multi-Filter Rack, Dynamic Categories, Reset Controls, Delete Confirmation & Telemetry Cleanup Alerts
+- [x] **Milestone 4 (Final Integration & Documentation)**: End-to-End Workflow Verification, API & Architecture Documentation, and Evaluation Readiness
+- [ ] **Milestone 5 (Unity / ISD Integration)**: Interactive 3D / Unity Workstation Integration (Pending)
 
 ## Working with the team
 
@@ -418,7 +423,7 @@ The following is the project's development history, in chronological order:
 
 ## Current limitations and security note
 
-- The API currently does not include user authentication or authorization. Treat this as a local development/demo application; do not expose it publicly with real or sensitive documents until authentication, authorization, and deployment security are added.
+- The API currently does not include user authentication or authorization. This is a current implementation limitation; the application is designed and run as a local development and demonstration console. Do not expose it publicly with real or sensitive documents until authentication, authorization, and deployment security are added.
 - Uploaded and generated files are stored on the machine running the backend. They are not automatically synchronized between team members.
 - OCR quality depends on the source document's image quality and the available language model.
 
