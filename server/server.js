@@ -10,6 +10,7 @@ import documentsRouter from './routes/documents.js';
 import documentProcessingRouter from './routes/documentProcessing.js';
 import documentConversionRouter from './routes/documentConversion.js';
 import categoriesRouter from './routes/categories.js';
+import { terminateOcrWorker } from './services/documentProcessor.js';
 
 dotenv.config();
 
@@ -43,6 +44,18 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal Server Error', details: err.message });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Readify Server running on http://localhost:${PORT}`);
 });
+
+const gracefulShutdown = async () => {
+  try {
+    await terminateOcrWorker();
+  } catch (_) {}
+  server.close(() => {
+    process.exit(0);
+  });
+};
+
+process.on('SIGINT', gracefulShutdown);
+process.on('SIGTERM', gracefulShutdown);

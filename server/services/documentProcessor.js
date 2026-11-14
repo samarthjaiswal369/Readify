@@ -12,6 +12,8 @@ const __dirname = path.dirname(__filename);
 // Standard fonts and CMaps paths for PDF.js in Node.js
 const standardFontsPath = path.resolve(__dirname, '../../node_modules/pdfjs-dist/standard_fonts/') + '/';
 const cmapsPath = path.resolve(__dirname, '../../node_modules/pdfjs-dist/cmaps/') + '/';
+const projectRoot = path.resolve(__dirname, '../../');
+const localModelPath = path.resolve(projectRoot, 'eng.traineddata');
 
 const DEFAULT_MIN_TEXT_CHARS = 15;
 const DEFAULT_PDF_RENDER_SCALE = 2.0;
@@ -31,6 +33,7 @@ let ocrWorkerPromise = null;
 
 /**
  * Returns a shared Tesseract worker initialized with English OCR.
+ * Supports local eng.traineddata in the project root if available.
  * Reuses the existing worker instance to avoid expensive re-initializations.
  */
 export async function getOcrWorker() {
@@ -40,7 +43,12 @@ export async function getOcrWorker() {
   if (!ocrWorkerPromise) {
     ocrWorkerPromise = (async () => {
       try {
-        const worker = await createWorker('eng');
+        const workerOptions = {};
+        if (fs.existsSync(localModelPath)) {
+          workerOptions.langPath = projectRoot;
+          workerOptions.cachePath = projectRoot;
+        }
+        const worker = await createWorker('eng', 1, workerOptions);
         ocrWorker = worker;
         return worker;
       } catch (err) {
@@ -64,6 +72,23 @@ export async function terminateOcrWorker() {
     try {
       await workerToTerminate.terminate();
     } catch (_) {}
+  }
+}
+
+/**
+ * Safely performs OCR recognition using the shared worker.
+ * Automatically terminates and resets the worker if an unrecoverable failure occurs,
+ * ensuring subsequent requests are not blocked by a corrupted worker instance.
+ */
+export async function recognizeWithOcr(imageBuffer, options = {}) {
+  const worker = await getOcrWorker();
+  try {
+    const result = await worker.recognize(imageBuffer, options);
+    return result;
+  } catch (error) {
+    // Terminate and reset worker state so subsequent operations do not hang or fail
+    await terminateOcrWorker();
+    throw error;
   }
 }
 
@@ -166,8 +191,7 @@ export async function processPdf(input, options = {}) {
             await page.render({ canvasContext: ctx, viewport }).promise;
             const renderedBuffer = canvas.toBuffer('image/png');
 
-            const worker = await getOcrWorker();
-            const ocrRes = await worker.recognize(renderedBuffer);
+            const ocrRes = await recognizeWithOcr(renderedBuffer);
             const ocrText = (ocrRes?.data?.text || '').trim();
 
             if (ocrText.length > 0) {
@@ -287,8 +311,7 @@ export async function processImage(input, options = {}) {
   }
 
   try {
-    const worker = await getOcrWorker();
-    const res = await worker.recognize(buffer);
+    const res = await recognizeWithOcr(buffer);
     const text = (res?.data?.text || '').trim();
 
     if (!text) {
@@ -404,6 +427,7 @@ export default {
   processPdf,
   processDocx,
   processImage,
+  recognizeWithOcr,
   getOcrWorker,
   terminateOcrWorker,
   DocumentProcessingError
