@@ -65,7 +65,8 @@ ALTER TABLE document_events
       'processing_completed',
       'processing_failed',
       'outputs_generated',
-      'conversion_failed'
+      'conversion_failed',
+      'summary_generated'
     )
   );
 

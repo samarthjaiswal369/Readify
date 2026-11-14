@@ -13,6 +13,7 @@ import {
   validateFileSignature,
   safeDeleteFile
 } from '../utils/fileValidation.js';
+import { generateExtractiveSummary } from '../services/documentSummarizer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -382,6 +383,122 @@ router.patch('/:id', async (req, res) => {
     return res.status(500).json({
       error: 'Failed to update document text.',
       details: err.message
+    });
+  }
+});
+
+router.get('/:id/summary', async (req, res) => {
+  const idValue = req.params.id;
+
+  if (!/^\d+$/.test(idValue) || !Number.isSafeInteger(Number(idValue)) || Number(idValue) < 1) {
+    return res.status(400).json({ error: 'Invalid document ID.' });
+  }
+
+  const documentId = Number(idValue);
+
+  try {
+    const result = await pool.query(
+      `SELECT id, document_id, summary_type, summary_text, key_points, word_count, created_at
+       FROM document_summaries
+       WHERE document_id = $1
+       ORDER BY created_at DESC, id DESC
+       LIMIT 1`,
+      [documentId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({ summary: null });
+    }
+
+    return res.json({ summary: result.rows[0] });
+  } catch (error) {
+    console.error('Failed to retrieve summary:', error);
+    return res.status(500).json({ error: 'Unable to retrieve document summary.' });
+  }
+});
+
+router.post('/:id/summarize', async (req, res) => {
+  const idValue = req.params.id;
+
+  if (!/^\d+$/.test(idValue) || !Number.isSafeInteger(Number(idValue)) || Number(idValue) < 1) {
+    return res.status(400).json({ error: 'Invalid document ID.' });
+  }
+
+  const documentId = Number(idValue);
+
+  try {
+    const docResult = await pool.query(
+      'SELECT id, original_name, status, extracted_text FROM documents WHERE id = $1',
+      [documentId]
+    );
+
+    if (docResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Document not found.' });
+    }
+
+    const document = docResult.rows[0];
+
+    if (!document.extracted_text || !document.extracted_text.trim()) {
+      return res.status(422).json({
+        error: 'Document has no extracted text to summarize. Process the document first.'
+      });
+    }
+
+    const summaryResult = generateExtractiveSummary(document.extracted_text);
+
+    const insertResult = await pool.query(
+      `INSERT INTO document_summaries (
+         document_id,
+         summary_type,
+         summary_text,
+         key_points,
+         word_count,
+         created_at
+       ) VALUES ($1, 'extractive', $2, $3, $4, NOW())
+       RETURNING id, document_id, summary_type, summary_text, key_points, word_count, created_at`,
+      [
+        documentId,
+        summaryResult.summary_text,
+        summaryResult.key_points,
+        summaryResult.word_count
+      ]
+    );
+
+    try {
+      await recordDocumentEvent(
+        pool,
+        documentId,
+        'summary_generated',
+        `Algorithmic document summary generated (${summaryResult.word_count} words).`,
+        {
+          summary_type: 'extractive',
+          word_count: summaryResult.word_count
+        }
+      );
+    } catch (_) {
+      try {
+        await recordDocumentEvent(
+          pool,
+          documentId,
+          'processing_completed',
+          `Algorithmic document summary generated (${summaryResult.word_count} words).`,
+          {
+            summary_type: 'extractive',
+            word_count: summaryResult.word_count
+          }
+        );
+      } catch (__) {}
+    }
+
+    return res.status(201).json({
+      message: 'Extractive summary generated successfully.',
+      summary: insertResult.rows[0]
+    });
+  } catch (error) {
+    console.error('Failed to generate summary:', error);
+    return res.status(500).json({
+      error: 'Failed to generate document summary.',
+      details: error.message
     });
   }
 });

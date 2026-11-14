@@ -23,7 +23,8 @@ import {
   RotateCcw,
   Tag,
   Edit3,
-  Save
+  Save,
+  Sparkles
 } from 'lucide-react';
 
 function formatFileSize(bytes) {
@@ -93,6 +94,10 @@ export default function App() {
   const [editedTextValue, setEditedTextValue] = useState('');
   const [savingText, setSavingText] = useState(false);
   const [saveTextNotice, setSaveTextNotice] = useState(null);
+
+  const [summaryData, setSummaryData] = useState(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState(null);
 
   const addLog = (msg) => {
     const now = new Date().toTimeString().split(' ')[0];
@@ -214,6 +219,7 @@ export default function App() {
       setPreviewError(null);
       setPreviewOpen(true);
       await fetchDocumentHistory(documentId);
+      await fetchDocumentSummary(documentId);
 
       setProcessingNotice({
         type: 'success',
@@ -259,6 +265,7 @@ export default function App() {
       setIsEditingText(false);
       setSaveTextNotice(null);
       await fetchDocumentHistory(documentId);
+      await fetchDocumentSummary(documentId);
     } catch (error) {
       setPreviewError(error.message);
     } finally {
@@ -332,6 +339,46 @@ export default function App() {
     setIsEditingText(false);
     setEditedTextValue('');
     setSaveTextNotice(null);
+    setSummaryData(null);
+    setSummaryError(null);
+    setSummaryLoading(false);
+  };
+
+  const fetchDocumentSummary = async (documentId) => {
+    try {
+      const res = await fetch(`/api/documents/${documentId}/summary`);
+      if (res.ok) {
+        const data = await res.json();
+        setSummaryData(data.summary || null);
+      }
+    } catch (_) {
+      setSummaryData(null);
+    }
+  };
+
+  const handleGenerateSummary = async (documentId) => {
+    if (summaryLoading) return;
+    setSummaryLoading(true);
+    setSummaryError(null);
+    addLog(`COMPUTING EXTRACTIVE SUMMARY // DOCUMENT #${documentId}...`);
+
+    try {
+      const res = await fetch(`/api/documents/${documentId}/summarize`, {
+        method: 'POST'
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to generate document summary.');
+      }
+      setSummaryData(data.summary);
+      addLog(`SUMMARY OK // DOCUMENT #${documentId} (${data.summary.word_count} WORDS)`);
+      await fetchDocumentHistory(documentId);
+    } catch (err) {
+      setSummaryError(err.message);
+      addLog(`SUMMARY FAILED // #${documentId} // ${err.message}`);
+    } finally {
+      setSummaryLoading(false);
+    }
   };
 
   const handleSaveEditedText = async () => {
@@ -1516,6 +1563,82 @@ export default function App() {
                         <span>{conversionNotice.message}</span>
                       </div>
                     )}
+
+                    <section
+                      className="document-summary-panel"
+                      aria-labelledby="document-summary-title"
+                      style={{
+                        marginTop: '16px',
+                        background: '#232a26',
+                        border: '1px solid #3d4a41',
+                        borderRadius: '6px',
+                        padding: '14px'
+                      }}
+                    >
+                      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <div>
+                          <div className="mono document-preview-kicker">TF-IDF ALGORITHMIC CO-PROCESSOR</div>
+                          <h3 id="document-summary-title" style={{ fontSize: '13px', fontWeight: 700, color: '#f7f4ec', margin: '2px 0 0 0' }}>
+                            AUTO SUMMARY & KEY TAKEAWAYS
+                          </h3>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="tactile-btn primary"
+                          style={{ fontSize: '11px', padding: '5px 12px' }}
+                          onClick={() => handleGenerateSummary(previewDocument.id)}
+                          disabled={summaryLoading || !previewDocument.extracted_text}
+                        >
+                          {summaryLoading ? <RefreshCw size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                          <span>{summaryLoading ? 'COMPUTING...' : summaryData ? 'RE-CALCULATE' : 'GENERATE SUMMARY'}</span>
+                        </button>
+                      </header>
+
+                      <div style={{ fontSize: '10px', color: '#a3b5a7', background: 'rgba(0,0,0,0.3)', borderLeft: '3px solid #ffb84d', padding: '5px 8px', borderRadius: '3px', marginBottom: '8px' }}>
+                        <span style={{ fontWeight: 700, color: '#ffb84d' }}>NOTE:</span> This summary is an algorithmic extraction based on TF-IDF sentence frequency and square-root length scoring, not generative AI. Sentences are mathematically ranked from the source text.
+                      </div>
+
+                      {summaryError && (
+                        <div className="telemetry-alert error" style={{ margin: '8px 0' }}>
+                          <AlertTriangle size={13} />
+                          <span>{summaryError}</span>
+                        </div>
+                      )}
+
+                      {summaryData ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+                          <div style={{ background: '#1c221e', borderRadius: '4px', padding: '12px', border: '1px solid #2e3831' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                              <div className="mono" style={{ fontSize: '10px', color: '#5af0a2', fontWeight: 700 }}>
+                                AUTO SUMMARY ({summaryData.word_count} WORDS)
+                              </div>
+                              <span className="mono" style={{ fontSize: '9px', color: '#8fa696', letterSpacing: '0.5px' }}>
+                                MATHEMATICAL APPROXIMATION
+                              </span>
+                            </div>
+                            <p style={{ fontSize: '12px', color: '#d8e6da', lineHeight: 1.6, margin: 0 }}>
+                              {summaryData.summary_text}
+                            </p>
+                          </div>
+
+                          {summaryData.key_points && (
+                            <div style={{ background: '#1c221e', borderRadius: '4px', padding: '12px', border: '1px solid #2e3831' }}>
+                              <div className="mono" style={{ fontSize: '10px', color: '#ffb84d', fontWeight: 700, marginBottom: '6px' }}>
+                                KEY TAKEAWAYS
+                              </div>
+                              <pre style={{ fontSize: '11px', color: '#c7d6c9', fontFamily: "'Chivo Mono', monospace", lineHeight: 1.6, whiteSpace: 'pre-wrap', margin: 0 }}>
+                                {summaryData.key_points}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '11px', color: '#7a8c80', fontFamily: "'Chivo Mono', monospace", padding: '6px 0' }}>
+                          NO SUMMARY COMPUTED YET. CLICK "GENERATE SUMMARY" TO RUN TF-IDF SENTENCE SCORING.
+                        </div>
+                      )}
+                    </section>
 
                     <section
                       className="document-history-panel"
